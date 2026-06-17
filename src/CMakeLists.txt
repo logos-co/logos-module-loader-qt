@@ -40,6 +40,9 @@ set_target_properties(logos_module_loader PROPERTIES
 add_library(logos_module_loader_qt STATIC
     qt_plugin_format_loader.cpp
     qt_plugin_format_loader.h
+    # Provides LogosCore::makeFormatLoader() (logos-module-loader factory seam)
+    # so consumers select this loader at link time without naming it.
+    qt_plugin_format_loader_factory.cpp
 )
 
 # boost::dll resolves the running executable's path (to find logos_host_qt next
