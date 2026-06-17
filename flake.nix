@@ -11,9 +11,8 @@
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
-    logos-container.url = "github:logos-co/logos-container/abstract_container";
-    logos-module-loader.url = "github:logos-co/logos-module-loader/abstract_module_loader";
-    logos-module-loader.inputs.logos-container.follows = "logos-container";
+    logos-container.url = "github:logos-co/logos-container";
+    logos-module-loader.url = "github:logos-co/logos-module-loader";
   };
 
   outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-container, logos-module-loader }:
