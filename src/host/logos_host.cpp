@@ -9,9 +9,13 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <thread>
 
 #include <execinfo.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 namespace {
 
@@ -140,6 +144,52 @@ void installCrashHandler(const char* moduleName)
 
 int main(int argc, char *argv[])
 {
+#ifndef _WIN32
+    // Isolate this module subprocess into its own session/process group, up
+    // front. The host is spawned in the daemon's process group, which is in turn
+    // the group of whatever launched the daemon (a shell, a script). Leaving the
+    // module tree in that shared group means tearing it down on shutdown — or any
+    // process-group signal aimed at the daemon — leaks into the launcher and can
+    // kill the shell driving it (a script's teardown step dies with exit -15 on
+    // Linux). The daemon itself deliberately stays in the foreground / its
+    // launcher's group so process managers (systemd, Docker) and shells keep
+    // managing it normally; only its workers detach. A freshly forked child is
+    // never a group leader, so setsid() succeeds; on the off chance it doesn't,
+    // setpgid() still gives us an isolated group.
+    if (::setsid() == -1 && errno != EPERM) {
+        ::setpgid(0, 0);
+    }
+    // Tie this worker's lifetime to the daemon's. If the daemon (our parent) dies
+    // WITHOUT cleaning us up — i.e. it crashes — make sure we don't linger as an
+    // orphan. setsid() above detached us from the controlling terminal, removing
+    // the incidental SIGHUP that used to reap orphans, so we replace it: graceful
+    // shutdown still kills us per-PID from the daemon, and now a daemon *crash*
+    // cleans us up too.
+    {
+        const pid_t daemon_pid = ::getppid();
+#ifdef __linux__
+        // Kernel-level + immediate. PR_SET_PDEATHSIG fires when the thread that
+        // forked us exits; that is the daemon's long-lived event-loop/io thread,
+        // so it only fires on real daemon death.
+        ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
+        // Race guard: if the daemon already died between fork() and now, our
+        // parent has changed — exit. Compare against the daemon's actual pid (not
+        // pid 1) so a daemon that is itself PID 1 (a container) is handled right.
+        if (::getppid() != daemon_pid) {
+            _exit(0);
+        }
+        // Portable watchdog (covers platforms without PR_SET_PDEATHSIG, e.g.
+        // macOS, and backs it up elsewhere): exit if our parent changes.
+        std::thread([daemon_pid] {
+            while (::getppid() == daemon_pid) {
+                ::sleep(1);
+            }
+            _exit(0);
+        }).detach();
+    }
+#endif
+
     ModuleArgs args = parseCommandLineArgs(argc, argv);
     if (!args.valid) {
         return 1;
