@@ -17,15 +17,19 @@ namespace {
     // wakes the Qt event loop on its own thread and quits the app cleanly.
     int s_sigPipe[2] = { -1, -1 };
 
-    // async-signal-safe: write(2) only.
+    // async-signal-safe: write(2) only. Save/restore errno: unlike the
+    // fatal-signal handler this one returns to normal execution, so it must not
+    // clobber errno for a syscall the interrupted code is about to inspect.
     extern "C" void onTerminationSignal(int /*sig*/) {
         if (s_sigPipe[1] < 0) return;
+        const int savedErrno = errno;
         const char byte = 1;
         ssize_t rc;
         do {
             rc = ::write(s_sigPipe[1], &byte, 1);
         } while (rc < 0 && errno == EINTR);
         (void)rc;
+        errno = savedErrno;
     }
 }
 
@@ -43,10 +47,28 @@ namespace QtApp {
     // be called after init() (needs the QCoreApplication for the notifier).
     void installSignalHandlers() {
         if (!s_app) return;
+        if (s_sigPipe[0] >= 0) return;  // idempotent: install at most once
         if (::pipe(s_sigPipe) != 0) return;
+
+        // The write end MUST be non-blocking: a blocking write() from the async
+        // signal handler could stall inside signal context if the pipe filled.
+        // If we can't guarantee that, tear the pipe down and leave the default
+        // disposition in place rather than risk a deadlock.
+        bool ok = true;
         for (int fd : s_sigPipe) {
-            ::fcntl(fd, F_SETFD, ::fcntl(fd, F_GETFD) | FD_CLOEXEC);
-            ::fcntl(fd, F_SETFL, ::fcntl(fd, F_GETFL) | O_NONBLOCK);
+            const int fdFlags = ::fcntl(fd, F_GETFD);
+            const int flFlags = ::fcntl(fd, F_GETFL);
+            if (fdFlags < 0 || flFlags < 0 ||
+                ::fcntl(fd, F_SETFD, fdFlags | FD_CLOEXEC) < 0 ||
+                ::fcntl(fd, F_SETFL, flFlags | O_NONBLOCK) < 0) {
+                ok = false;
+            }
+        }
+        if (!ok) {
+            ::close(s_sigPipe[0]);
+            ::close(s_sigPipe[1]);
+            s_sigPipe[0] = s_sigPipe[1] = -1;
+            return;
         }
 
         auto* notifier = new QSocketNotifier(s_sigPipe[0], QSocketNotifier::Read, s_app);
