@@ -199,6 +199,13 @@ int main(int argc, char *argv[])
 
     QtApp::init(argc, argv);
 
+    // Quit cleanly on SIGTERM/SIGINT (the signals the subprocess container and
+    // an operator send at shutdown) so exec() returns and `delete logos_api`
+    // below runs its destructor chain — which is what unlinks this module's
+    // QtRO local socket. Without it the host dies mid-exec() by default signal
+    // disposition and leaks /tmp/logos_<name>_<instance> on every shutdown.
+    QtApp::installSignalHandlers();
+
     // Read the auth token from the channel our container designated via
     // --token-source (default: stdin). The host is deliberately agnostic to
     // which container spawned it — it just reads bytes from an OS handle, so it
