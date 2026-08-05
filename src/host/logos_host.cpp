@@ -176,7 +176,8 @@ void hostMessageHandler(QtMsgType type, const QMessageLogContext &context,
     }
     if (type == QtCriticalMsg || type == QtFatalMsg) {
         // Only the serious ones are worth the file/line noise.
-        fprintf(stderr, "%s: %s (%s:%u)\n", level, text.constData(),
+        // %d, not %u: QMessageLogContext::line is an int.
+        fprintf(stderr, "%s: %s (%s:%d)\n", level, text.constData(),
                 context.file ? context.file : "", context.line);
     } else {
         fprintf(stderr, "%s: %s\n", level, text.constData());
