@@ -5,6 +5,10 @@
 #include "logos_api.h"
 #include "interface.h"
 
+#include <QtGlobal>          // qInstallMessageHandler, QtMsgType
+#include <QMessageLogContext>
+#include <QString>
+
 #include <cerrno>
 #include <csignal>
 #include <cstddef>
@@ -140,6 +144,49 @@ void installCrashHandler(const char* moduleName)
     }
 }
 
+// Send Qt's own logging to stderr, always.
+//
+// Without a handler installed, Qt picks a backend for us, and a Qt built with
+// journald support routes qDebug/qInfo/qWarning there instead of stderr once
+// stderr is not a terminal -- which is exactly the case for a module host: the
+// daemon spawns it with its stdio inherited from a pipe or a file.
+//
+// The effect is that everything a module logs vanishes from the daemon's log.
+// Measured on a logosctl session: 34 module lines went to journald and 0 to
+// the daemon's log file, and forcing stderr took the module lines in one
+// install from 3 to 18. Every frontend (logoscore, logosctl, basecamp)
+// installs a handler and so keeps its own output; the host was the only
+// process in the tree that did not, and it is the one whose output an operator
+// most wants when a module misbehaves.
+//
+// Nothing here decides WHAT is worth logging -- the frontends filter by
+// verbosity at their end, and the daemon captures this stream. The host's job
+// is only to make sure the stream reaches its parent at all.
+void hostMessageHandler(QtMsgType type, const QMessageLogContext &context,
+                        const QString &msg)
+{
+    const QByteArray text = msg.toLocal8Bit();
+    const char *level = "Info";
+    switch (type) {
+    case QtDebugMsg:    level = "Debug";    break;
+    case QtInfoMsg:     level = "Info";     break;
+    case QtWarningMsg:  level = "Warning";  break;
+    case QtCriticalMsg: level = "Critical"; break;
+    case QtFatalMsg:    level = "Fatal";    break;
+    }
+    if (type == QtCriticalMsg || type == QtFatalMsg) {
+        // Only the serious ones are worth the file/line noise.
+        fprintf(stderr, "%s: %s (%s:%u)\n", level, text.constData(),
+                context.file ? context.file : "", context.line);
+    } else {
+        fprintf(stderr, "%s: %s\n", level, text.constData());
+    }
+    fflush(stderr);
+    if (type == QtFatalMsg) {
+        abort();
+    }
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -196,6 +243,10 @@ int main(int argc, char *argv[])
     }
 
     installCrashHandler(args.name.c_str());
+
+    // Before QtApp::init, so that anything Qt says while starting up lands on
+    // stderr too rather than in whichever backend it would have chosen.
+    qInstallMessageHandler(hostMessageHandler);
 
     QtApp::init(argc, argv);
 
