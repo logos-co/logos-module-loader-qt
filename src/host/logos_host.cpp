@@ -15,13 +15,17 @@
 #include <cstdint>
 #include <thread>
 
-#include <execinfo.h>
 #include <unistd.h>
+#ifndef _WIN32
+#include <execinfo.h>
+#endif
 #ifdef __linux__
 #include <sys/prctl.h>
 #endif
 
 namespace {
+
+#ifndef _WIN32
 
 // Fatal signals that indicate the loaded module faulted.
 constexpr int kFatalSignals[] = { SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE };
@@ -143,6 +147,27 @@ void installCrashHandler(const char* moduleName)
         ::sigaction(s, &sa, nullptr);
     }
 }
+
+#else  // _WIN32
+
+// No crash handler on Windows, deliberately.
+//
+// This one is built entirely on POSIX signals + sigaltstack + backtrace(3),
+// none of which mingw-w64 has (there is no <execinfo.h>, and SIGBUS does not
+// exist). The obvious Win32 translation -- SetUnhandledExceptionFilter plus
+// DbgHelp's SymFromAddr -- would REINTRODUCE the exact hazard the comment on
+// safeWrite above exists to avoid: symbolisation takes the loader lock, and a
+// crash handler that grabs the loader lock deadlocks precisely when it is
+// needed most (a fault inside a module dlopen/LoadLibrary).
+//
+// If Windows backtraces are wanted later, the safe shape is
+// CaptureStackBackTrace (lock-free) writing raw hex addresses, symbolised
+// offline against the PDB -- mirroring what safeWriteHex already does here.
+// Until then a module fault simply terminates the host, which the parent
+// already detects and reports.
+void installCrashHandler(const char* /*moduleName*/) {}
+
+#endif  // _WIN32
 
 // Send Qt's own logging to stderr, always.
 //

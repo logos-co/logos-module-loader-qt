@@ -12,6 +12,8 @@
 namespace {
     QCoreApplication* s_app = nullptr;
 
+#ifndef _WIN32
+
     // Self-pipe trick: the signal handler must be async-signal-safe, so it does
     // nothing but write() one byte to a pipe. A QSocketNotifier on the read end
     // wakes the Qt event loop on its own thread and quits the app cleanly.
@@ -31,6 +33,7 @@ namespace {
         (void)rc;
         errno = savedErrno;
     }
+#endif  // _WIN32
 }
 
 namespace QtApp {
@@ -45,6 +48,27 @@ namespace QtApp {
     // runs, so QtRO's QLocalServer never unlinks its socket — every module
     // leaks its /tmp/logos_<name>_<instance> file on every clean shutdown. Must
     // be called after init() (needs the QCoreApplication for the notifier).
+#ifdef _WIN32
+
+    // Nothing to install on Windows -- and this is NOT a gap.
+    //
+    // The POSIX build needs the self-pipe because a default-disposition
+    // SIGTERM kills the process mid-exec(), skipping the destructor chain that
+    // unlinks QtRO's socket. On Windows the parent asks for shutdown by
+    // posting WM_QUIT to the child's main thread, and Qt's own Win32 event
+    // dispatcher already turns WM_QUIT into QCoreApplication::quit() -- the
+    // very effect this function hand-rolls elsewhere. exec() returns normally
+    // and the destructors run.
+    //
+    // Do NOT "port" this by swapping ::pipe for _pipe: it compiles and looks
+    // right, but QEventDispatcherWin32::registerSocketNotifier routes to
+    // WSAAsyncSelect and DISCARDS its return value. A CRT pipe fd is not a
+    // SOCKET, so it fails with WSAENOTSOCK, silently, and the notifier simply
+    // never fires -- a broken shutdown path that reports no error at all.
+    void installSignalHandlers() {}
+
+#else
+
     void installSignalHandlers() {
         if (!s_app) return;
         if (s_sigPipe[0] >= 0) return;  // idempotent: install at most once
@@ -85,6 +109,8 @@ namespace QtApp {
         ::sigaction(SIGTERM, &sa, nullptr);
         ::sigaction(SIGINT, &sa, nullptr);
     }
+
+#endif  // _WIN32
 
     int exec() {
         if (!s_app) return -1;

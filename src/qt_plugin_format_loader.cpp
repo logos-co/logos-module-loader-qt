@@ -11,9 +11,19 @@ namespace fs = std::filesystem;
 
 namespace {
 
+// Windows executables carry a .exe extension, so probing the bare name finds
+// nothing and EVERY module load fails with "logos_host_qt ... not found" — the
+// host is resolved before any module can be spawned. logos-view-module-runtime
+// already does this for its ui-host (ViewModuleHost.cpp).
+#ifdef _WIN32
+constexpr const char* kExeSuffix = ".exe";
+#else
+constexpr const char* kExeSuffix = "";
+#endif
+
 fs::path findInDir(const fs::path& dir) {
     for (const auto& name : {"logos_host_qt", "logos_host"}) {
-        auto candidate = (dir / name).lexically_normal();
+        auto candidate = (dir / (std::string(name) + kExeSuffix)).lexically_normal();
         if (fs::exists(candidate))
             return candidate;
     }

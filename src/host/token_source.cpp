@@ -3,8 +3,16 @@
 #include <spdlog/spdlog.h>
 
 #include <fcntl.h>
-#include <poll.h>
 #include <unistd.h>
+#ifndef _WIN32
+#include <poll.h>
+#else
+#include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <thread>
+#endif
 
 #include <cctype>
 #include <cerrno>
@@ -23,6 +31,67 @@ void firstLine(std::string& s) {
     if (nl != std::string::npos) s.resize(nl);
     if (!s.empty() && s.back() == '\r') s.pop_back();
 }
+
+#ifdef _WIN32
+
+// mingw-w64 ships <unistd.h> (read/close) but NOT <poll.h>, and Win32 has no
+// single readiness wait that covers all three things stdin can be here: an
+// anonymous pipe from the subprocess container, a redirected file, or a
+// console. (WaitForSingleObject does not signal readability on a pipe handle;
+// PeekNamedPipe does not work on files or consoles.)
+//
+// So do the blocking read on a detached thread and bound the WAIT instead of
+// the read. That behaves identically for all three channel kinds.
+//
+// The shared state is a shared_ptr so a thread that wakes up after we have
+// already timed out writes into memory that is still alive. Detaching is safe
+// here specifically because the token is required at startup: a timeout means
+// the caller returns {} and the host exits immediately afterwards.
+//
+// Slight departure from this file's "plain libc" note in the header: it now
+// also uses <thread>/<mutex>, which is still standard C++ and adds no library
+// dependency.
+std::string readFdUntilNewlineOrEof(int fd, int timeout_ms) {
+    struct Shared {
+        std::mutex m;
+        std::condition_variable cv;
+        std::string out;
+        bool done = false;
+    };
+    auto sh = std::make_shared<Shared>();
+
+    std::thread([sh, fd] {
+        std::string local;
+        char buf[256];
+        for (;;) {
+            const int n = ::read(fd, buf, sizeof(buf));
+            if (n > 0) {
+                local.append(buf, static_cast<std::size_t>(n));
+                if (local.find('\n') != std::string::npos) break;  // full line
+                continue;
+            }
+            break;  // EOF (0) or error (<0): token is whatever arrived
+        }
+        {
+            std::lock_guard<std::mutex> lk(sh->m);
+            sh->out = std::move(local);
+            sh->done = true;
+        }
+        sh->cv.notify_one();
+    }).detach();
+
+    std::unique_lock<std::mutex> lk(sh->m);
+    const auto ready = [&] { return sh->done; };
+    if (timeout_ms < 0) {          // mirror poll()'s "negative means forever"
+        sh->cv.wait(lk, ready);
+    } else if (!sh->cv.wait_for(lk, std::chrono::milliseconds(timeout_ms), ready)) {
+        spdlog::critical("Timed out waiting for auth token on fd {}", fd);
+        return {};
+    }
+    return sh->out;
+}
+
+#else
 
 // Read from `fd` until the first newline, EOF, or the deadline. Returns the
 // bytes read (newline included if seen); caller reduces to the first line.
@@ -54,6 +123,8 @@ std::string readFdUntilNewlineOrEof(int fd, int timeout_ms) {
         return {};
     }
 }
+
+#endif  // _WIN32
 
 std::string readFromFile(const std::string& path, int timeout_ms) {
     const int fd = ::open(path.c_str(), O_RDONLY);
