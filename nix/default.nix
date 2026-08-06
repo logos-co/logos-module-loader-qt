@@ -9,8 +9,8 @@
     pkgs.cmake
     pkgs.ninja
     pkgs.pkg-config
-    pkgs.qt6.wrapQtAppsNoGuiHook
-  ];
+  ]
+  ++ pkgs.lib.optional (!pkgs.stdenv.hostPlatform.isWindows) pkgs.qt6.wrapQtAppsNoGuiHook;
 
   # Qt6 listed explicitly (not propagated by the SDK — qtbase's setup hook must
   # be sourced after wrapQtAppsHook). Boost/OpenSSL/nlohmann arrive transitively
@@ -29,7 +29,7 @@
     logosModuleLoader
   ];
 
-  cmakeFlags = [
+  cmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
     "-GNinja"
     "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
     "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
@@ -50,6 +50,6 @@
 
   meta = with pkgs.lib; {
     description = "Qt-plugin module loader: QtPluginFormatLoader + the logos_host_qt module-host binary";
-    platforms = platforms.unix;
+    platforms = platforms.unix ++ platforms.windows;
   };
 }
