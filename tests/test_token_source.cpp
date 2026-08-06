@@ -12,10 +12,14 @@
 #include <fcntl.h>
 #include <unistd.h>
 #ifdef _WIN32
-#include <io.h>       // _pipe / _write on mingw
-#include <share.h>
-#include <sys/stat.h>
-#include <windows.h>
+// Deliberately NOT <windows.h>: winnt.h declares a TOKEN_INFORMATION_CLASS
+// enumerator literally named TokenSource, which collides head-on with this
+// project's `namespace TokenSource` --
+//     winnt.h:4131: error: 'TokenSource' redeclared as different kind of entity
+// Everything needed here lives in the CRT headers instead.
+#include <io.h>       // _pipe / _write / _mktemp_s
+#include <share.h>    // _SH_DENYNO
+#include <sys/stat.h> // _S_IREAD / _S_IWRITE
 #endif
 
 #include <chrono>
@@ -47,13 +51,16 @@ inline ssize_t writeFd(int fd, const void* buf, std::size_t n) {
 // a /tmp, so the Windows branch asks the OS for both. Returns -1 on failure.
 #ifdef _WIN32
 inline int makeTempFile(std::string& pathOut) {
-    char dir[MAX_PATH]; char file[MAX_PATH];
-    if (::GetTempPathA(MAX_PATH, dir) == 0) return -1;
-    if (::GetTempFileNameA(dir, "lts", 0, file) == 0) return -1;
-    pathOut = file;
+    // _mktemp_s rewrites the trailing XXXXXX in place. Relative to the cwd,
+    // which is writable while the tests run -- and unlike the POSIX branch
+    // there is no /tmp to reach for.
+    char tmpl[] = "logos_token_src_XXXXXX";
+    if (::_mktemp_s(tmpl, sizeof tmpl) != 0) return -1;
     int fd = -1;
-    if (::_sopen_s(&fd, file, _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE) != 0)
+    if (::_sopen_s(&fd, tmpl, _O_RDWR | _O_CREAT | _O_EXCL | _O_BINARY,
+                   _SH_DENYNO, _S_IREAD | _S_IWRITE) != 0)
         return -1;
+    pathOut = tmpl;
     return fd;
 }
 #else

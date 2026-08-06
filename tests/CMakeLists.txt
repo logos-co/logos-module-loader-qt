@@ -20,4 +20,6 @@ target_include_directories(logos_module_loader_qt_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/host
 )
 
-gtest_discover_tests(logos_module_loader_qt_tests)
+# DISCOVERY_MODE PRE_TEST: the default (POST_BUILD) RUNS the test binary at
+# build time to enumerate cases, which a Linux builder cannot do with a PE.
+gtest_discover_tests(logos_module_loader_qt_tests DISCOVERY_MODE PRE_TEST)
