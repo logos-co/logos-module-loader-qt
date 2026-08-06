@@ -37,9 +37,14 @@ pkgs.stdenvNoCC.mkDerivation {
 
     # logos_host -> logos_host_qt compatibility symlink (the CMake install adds
     # one too, but bin.nix copies only the build/ tree, so recreate it here).
-    if [ -e $out/bin/logos_host_qt ] && [ ! -e $out/bin/logos_host ]; then
-      ln -s logos_host_qt $out/bin/logos_host
-    fi
+    # The executable carries .exe when cross-compiling to Windows; linking to
+    # the bare name would leave a dangling symlink that noBrokenSymlinks
+    # rejects.
+    for ext in "" ".exe"; do
+      if [ -e "$out/bin/logos_host_qt$ext" ] && [ ! -e "$out/bin/logos_host$ext" ]; then
+        ln -s "logos_host_qt$ext" "$out/bin/logos_host$ext"
+      fi
+    done
 
     runHook postInstall
   '';

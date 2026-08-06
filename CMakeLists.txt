@@ -128,8 +128,13 @@ install(TARGETS logos_host_qt
 
 # Compatibility symlink: logos_host -> logos_host_qt so downstream consumers
 # (frontends that bundle the binary) keep working with either name.
+#
+# CMAKE_EXECUTABLE_SUFFIX matters on Windows: the installed file is
+# logos_host_qt.exe, so linking to the bare name produces a DANGLING symlink --
+# which nixpkgs' noBrokenSymlinks check then fails the build over. The link
+# itself also carries the suffix so that resolving "logos_host.exe" works.
 install(CODE "
   execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink
-    logos_host_qt
-    \${CMAKE_INSTALL_PREFIX}/bin/logos_host)
+    logos_host_qt${CMAKE_EXECUTABLE_SUFFIX}
+    \${CMAKE_INSTALL_PREFIX}/bin/logos_host${CMAKE_EXECUTABLE_SUFFIX})
 ")
