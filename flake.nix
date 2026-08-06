@@ -28,9 +28,27 @@
         logosContainer = logos-container.packages.${system}.default;
         logosModuleLoader = logos-module-loader.packages.${system}.default;
       });
+
+      # Same, plus "x86_64-windows". Every dependency here is a TARGET-side
+      # library (headers/archives compiled into this one), so they all follow
+      # ${system}; there is no build-time code generator to keep native.
+      forAllTargets = f:
+        nixpkgs.lib.genAttrs (systems ++ [ "x86_64-windows" ]) (system: f {
+          inherit system;
+          pkgs =
+            if system == "x86_64-windows"
+            then logos-nix.lib.mkWindowsPkgs { buildSystem = "x86_64-linux"; }
+            else import nixpkgs { inherit system; };
+          logosSdk = logos-cpp-sdk.packages.${system}.default;
+          logosProtocolPkg = logos-protocol.packages.${system}.default;
+          logosQtSdk = logos-qt-sdk.packages.${system}.default;
+          logosModule = logos-module.packages.${system}.default;
+          logosContainer = logos-container.packages.${system}.default;
+          logosModuleLoader = logos-module-loader.packages.${system}.default;
+        });
     in
     {
-      packages = forAllSystems ({ pkgs, system, logosSdk, logosProtocolPkg, logosQtSdk, logosModule, logosContainer, logosModuleLoader }:
+      packages = forAllTargets ({ pkgs, system, logosSdk, logosProtocolPkg, logosQtSdk, logosModule, logosContainer, logosModuleLoader, ... }:
         let
           common = import ./nix/default.nix {
             inherit pkgs logosSdk logosProtocolPkg logosQtSdk logosModule logosContainer logosModuleLoader;
