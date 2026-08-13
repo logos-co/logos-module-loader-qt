@@ -46,6 +46,7 @@ LogosModule loadModule(const std::string& modulePath, const std::string& expecte
 
 LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
                               PluginInterface* basePlugin, const std::string& authToken,
+                              const std::string& hostServices,
                               const std::string& modulePath,
                               const std::string& instancePersistencePath,
                               const std::string& transportSetJson)
@@ -82,6 +83,21 @@ LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
     // logos_module_accept_token — their statically-linked protocol stack has
     // its own TokenManager copy the host's saveToken calls below never reach.
     logos_api->setProperty("authToken", QString::fromStdString(authToken));
+
+    // Same channel, same reason, for the privileged host-services grant. Only
+    // stamped when the host actually granted something: the property's ABSENCE
+    // is what keeps an ordinary module fail-closed, and lp_grant_host_services
+    // REPLACES rather than adds, so pushing an empty array would be a needless
+    // clear.
+    //
+    // This sits after loadModule()'s name check (module_initializer.cpp's
+    // loadModule refuses a plugin whose own name() disagrees with the trusted
+    // registry key the parent passed), so by here the identity the grant is
+    // bound to has already been verified against the binary.
+    if (!hostServices.empty()) {
+        spdlog::info("Granting host services to {}: {}", moduleName, hostServices);
+        logos_api->setProperty("hostServices", QString::fromStdString(hostServices));
+    }
 
     bool success = logos_api->getProvider()->registerObject(basePlugin->name(), module);
     if (success) {

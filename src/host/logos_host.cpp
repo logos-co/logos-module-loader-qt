@@ -302,7 +302,8 @@ int main(int argc, char *argv[])
 
     PluginInterface* basePlugin = module.as<PluginInterface>();
     LogosAPI* logos_api = initializeLogosAPI(args.name, module.instance(),
-                                             basePlugin, authToken, args.path,
+                                             basePlugin, authToken, args.hostServices,
+                                             args.path,
                                              args.instancePersistencePath,
                                              args.transportSetJson);
     module.release();

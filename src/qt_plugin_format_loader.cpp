@@ -21,6 +21,29 @@ constexpr const char* kExeSuffix = ".exe";
 constexpr const char* kExeSuffix = "";
 #endif
 
+// ── The host-services policy ────────────────────────────────────────────────
+//
+// Which modules may hold the TRUST-ROOT services, decided HERE — host side and
+// bound to the module name the registry trusts, not to anything the module
+// asserts about itself. A module's metadata.json declaration is advisory; this
+// is the authority.
+//
+// Deliberately a hardcoded table rather than configuration: these two services
+// let their holder enumerate the token store and hand authority to an
+// arbitrary target, which is capability_module's job and nothing else's. A
+// deployment that wants a different trust root is a different build.
+//
+// `dynamic_calls` is NOT granted here. It is elevated but not a trust root, so
+// it belongs with the per-module access policy the daemon already applies,
+// alongside allowedCallers — not in a table that exists to keep a list at two
+// entries.
+const char* hostServicesFor(const std::string& moduleName)
+{
+    if (moduleName == "capability_module")
+        return R"(["token_registry","token_delivery"])";
+    return nullptr;
+}
+
 fs::path findInDir(const fs::path& dir) {
     for (const auto& name : {"logos_host_qt", "logos_host"}) {
         auto candidate = (dir / (std::string(name) + kExeSuffix)).lexically_normal();
@@ -90,6 +113,16 @@ std::vector<std::string> QtPluginFormatLoader::buildArguments(const LogosCore::M
     if (!desc.transportSetJson.empty()) {
         args.push_back("--transport-set");
         args.push_back(desc.transportSetJson);
+    }
+
+    // Privileged modules carry their grant on the command line, so it is in
+    // place before the plugin's provider init() runs — that init is where a
+    // cdylib module forwards the grant across the module-impl C ABI into its
+    // own image. Ordinary modules get no flag at all and stay fail-closed.
+    if (const char* services = hostServicesFor(desc.name)) {
+        spdlog::info("Granting host services to '{}': {}", desc.name, services);
+        args.push_back("--host-services");
+        args.push_back(services);
     }
 
     return args;
