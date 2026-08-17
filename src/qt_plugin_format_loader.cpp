@@ -37,11 +37,73 @@ constexpr const char* kExeSuffix = "";
 // it belongs with the per-module access policy the daemon already applies,
 // alongside allowedCallers — not in a table that exists to keep a list at two
 // entries.
+//
+// The value is a BARE COMMA-SEPARATED LIST, not JSON, because it crosses a
+// command line. This used to be `["token_registry","token_delivery"]` and it
+// broke on Windows only: CommandLineToArgvW treats `"` as a quoting delimiter
+// and CONSUMES it, so the child received `[token_registry,token_delivery]`,
+// nlohmann's parser discarded it, and lp_grant_host_services returned
+// LP_ERR_INVALID_ARG — rejecting the whole list by design. Measured on a real
+// Windows run: the host logged the correct JSON, the module process logged the
+// quote-stripped form, and the impl reported `host services refused`. POSIX
+// exec() passes argv through untouched, which is why Linux and macOS never saw
+// it and the basecamp host-services check stayed green.
+//
+// Service names are a closed set of `[a-z_]+` identifiers, so a comma-separated
+// list needs no quoting, no escaping and no brackets, and survives any
+// command-line reconstruction. module_initializer turns it back into the JSON
+// array that the `hostServices` property and lp_grant_host_services both
+// require, so neither of those contracts changes.
 const char* hostServicesFor(const std::string& moduleName)
 {
     if (moduleName == "capability_module")
-        return R"(["token_registry","token_delivery"])";
+        return "token_registry,token_delivery";
     return nullptr;
+}
+
+// Standard base64, so a JSON payload can cross a command line intact.
+//
+// The transport set is arbitrary nested JSON — endpoints, ports, TLS paths —
+// so unlike the host-services grant it cannot be flattened into a bare
+// identifier list, and it hits the same Windows defect: CommandLineToArgvW
+// consumes every `"`, and the child receives an unparseable string. The base64
+// alphabet is [A-Za-z0-9+/=] with no quote, space or backslash, so it survives
+// any command-line reconstruction on every platform.
+//
+// Hand-rolled rather than QByteArray::toBase64 because this translation unit is
+// deliberately Qt-free (boost + spdlog + std only) and this is the only place
+// that needs it; module_initializer, which is already a Qt TU, decodes with
+// QByteArray::fromBase64.
+std::string base64Encode(const std::string& in)
+{
+    static constexpr char kAlphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((in.size() + 2) / 3) * 4);
+
+    auto byte = [&in](std::size_t i) { return static_cast<unsigned>(static_cast<unsigned char>(in[i])); };
+
+    std::size_t i = 0;
+    for (; i + 2 < in.size(); i += 3) {
+        const unsigned v = (byte(i) << 16) | (byte(i + 1) << 8) | byte(i + 2);
+        out += kAlphabet[(v >> 18) & 0x3F];
+        out += kAlphabet[(v >> 12) & 0x3F];
+        out += kAlphabet[(v >> 6) & 0x3F];
+        out += kAlphabet[v & 0x3F];
+    }
+    if (in.size() - i == 1) {
+        const unsigned v = byte(i) << 16;
+        out += kAlphabet[(v >> 18) & 0x3F];
+        out += kAlphabet[(v >> 12) & 0x3F];
+        out += "==";
+    } else if (in.size() - i == 2) {
+        const unsigned v = (byte(i) << 16) | (byte(i + 1) << 8);
+        out += kAlphabet[(v >> 18) & 0x3F];
+        out += kAlphabet[(v >> 12) & 0x3F];
+        out += kAlphabet[(v >> 6) & 0x3F];
+        out += '=';
+    }
+    return out;
 }
 
 fs::path findInDir(const fs::path& dir) {
@@ -111,8 +173,12 @@ std::vector<std::string> QtPluginFormatLoader::buildArguments(const LogosCore::M
     }
 
     if (!desc.transportSetJson.empty()) {
+        // Base64, not raw JSON — see base64Encode above. The receiver detects
+        // which form it got: JSON starts with `{` or `[`, neither of which is
+        // in the base64 alphabet, so an older emitter talking to a newer host
+        // still works.
         args.push_back("--transport-set");
-        args.push_back(desc.transportSetJson);
+        args.push_back(base64Encode(desc.transportSetJson));
     }
 
     // Privileged modules carry their grant on the command line, so it is in
