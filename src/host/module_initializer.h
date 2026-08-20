@@ -12,6 +12,7 @@ ModuleLib::LogosModule loadModule(const std::string& modulePath, const std::stri
 
 LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
                               PluginInterface* basePlugin, const std::string& authToken,
+                              const std::string& hostServices,
                               const std::string& modulePath,
                               const std::string& instancePersistencePath = {},
                               const std::string& transportSetJson = {});

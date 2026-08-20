@@ -1,7 +1,13 @@
 #include "module_initializer.h"
+#include <QByteArray>
 #include <QObject>
 #include <spdlog/spdlog.h>
 #include <filesystem>
+// Explicit: the host-services grant arrives as a bare comma-separated list over
+// argv and is re-serialised to a JSON array here. logos_transport_config_json.h
+// deliberately keeps its nlohmann include off the fast path, so do not rely on
+// picking it up transitively from there.
+#include <nlohmann/json.hpp>
 #include "interface.h"
 #include "logos_api.h"
 #include "logos_api_provider.h"
@@ -13,6 +19,38 @@
 namespace fs = std::filesystem;
 
 using namespace ModuleLib;
+
+namespace {
+
+// `--transport-set` carries base64 so its JSON survives the command line: on
+// Windows, CommandLineToArgvW consumes `"` as a quoting delimiter, so raw JSON
+// arrives unparseable. See base64Encode() in qt_plugin_format_loader.cpp, which
+// is the only emitter.
+//
+// Both forms are accepted, and the discrimination is exact rather than
+// heuristic: a JSON transport set always begins with `{` or `[`, and neither
+// character is in the base64 alphabet. That keeps an older daemon paired with a
+// newer logos_host working.
+//
+// A payload that is neither valid base64 nor JSON is returned unchanged, so the
+// error surfaces where it is diagnosable — in transportSetFromJsonString —
+// rather than as a silently empty transport set here.
+std::string decodeTransportSetArg(const std::string& arg)
+{
+    if (!arg.empty() && (arg.front() == '{' || arg.front() == '[')) {
+        spdlog::debug("transport set supplied as raw JSON (pre-base64 emitter)");
+        return arg;
+    }
+    const QByteArray decoded = QByteArray::fromBase64(
+        QByteArray::fromStdString(arg), QByteArray::AbortOnBase64DecodingErrors);
+    if (decoded.isEmpty()) {
+        spdlog::warn("transport set is neither JSON nor valid base64; passing through unchanged");
+        return arg;
+    }
+    return decoded.toStdString();
+}
+
+} // namespace
 
 LogosModule loadModule(const std::string& modulePath, const std::string& expectedName)
 {
@@ -46,6 +84,7 @@ LogosModule loadModule(const std::string& modulePath, const std::string& expecte
 
 LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
                               PluginInterface* basePlugin, const std::string& authToken,
+                              const std::string& hostServices,
                               const std::string& modulePath,
                               const std::string& instancePersistencePath,
                               const std::string& transportSetJson)
@@ -60,7 +99,7 @@ LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
     LogosAPI* logos_api = nullptr;
     if (!transportSetJson.empty()) {
         LogosTransportSet set =
-            logos::transportSetFromJsonString(transportSetJson);
+            logos::transportSetFromJsonString(decodeTransportSetArg(transportSetJson));
         logos_api = new LogosAPI(QString::fromStdString(moduleName),
                                   std::move(set), module);
     } else {
@@ -82,6 +121,48 @@ LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
     // logos_module_accept_token — their statically-linked protocol stack has
     // its own TokenManager copy the host's saveToken calls below never reach.
     logos_api->setProperty("authToken", QString::fromStdString(authToken));
+
+    // Same channel, same reason, for the privileged host-services grant. Only
+    // stamped when the host actually granted something: the property's ABSENCE
+    // is what keeps an ordinary module fail-closed, and lp_grant_host_services
+    // REPLACES rather than adds, so pushing an empty array would be a needless
+    // clear.
+    //
+    // This sits after loadModule()'s name check (module_initializer.cpp's
+    // loadModule refuses a plugin whose own name() disagrees with the trusted
+    // registry key the parent passed), so by here the identity the grant is
+    // bound to has already been verified against the binary.
+    //
+    // The flag arrives as a BARE COMMA-SEPARATED LIST and is re-serialised to a
+    // JSON array here. It is not carried as JSON across the command line
+    // because Windows' CommandLineToArgvW consumes `"` as a quoting delimiter:
+    // `["token_registry","token_delivery"]` reached this process as
+    // `[token_registry,token_delivery]`, which nlohmann discards, and
+    // lp_grant_host_services rejects an unparseable list WHOLESALE. The symptom
+    // was Windows-only and silent apart from capability_module's own
+    // `host services refused` line. See hostServicesFor() in
+    // qt_plugin_format_loader.cpp.
+    //
+    // The property and the C ABI both still speak JSON; only the argv hop
+    // changed. Serialise through nlohmann rather than by string concatenation so
+    // a name that ever needs escaping is escaped.
+    if (!hostServices.empty()) {
+        nlohmann::json services = nlohmann::json::array();
+        std::size_t start = 0;
+        while (start <= hostServices.size()) {
+            const std::size_t comma = hostServices.find(',', start);
+            const std::size_t end = (comma == std::string::npos) ? hostServices.size() : comma;
+            std::string name = hostServices.substr(start, end - start);
+            if (!name.empty())
+                services.push_back(name);
+            if (comma == std::string::npos)
+                break;
+            start = comma + 1;
+        }
+        const std::string servicesJson = services.dump();
+        spdlog::info("Granting host services to {}: {}", moduleName, servicesJson);
+        logos_api->setProperty("hostServices", QString::fromStdString(servicesJson));
+    }
 
     bool success = logos_api->getProvider()->registerObject(basePlugin->name(), module);
     if (success) {
