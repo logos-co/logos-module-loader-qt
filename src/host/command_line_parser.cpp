@@ -21,7 +21,8 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
     app.add_option("--token-source", result.tokenSource,
         "Where to read the auth token from: stdin (default), fd:<n>, or file:<path>");
     app.add_option("--host-services", result.hostServices,
-        "Privileged host services granted to this module, as a JSON array; "
+        "Privileged host services granted to this module, as a bare "
+        "comma-separated list (e.g. token_registry,token_delivery); "
         "empty (the default) means none");
 
     try {
