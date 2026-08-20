@@ -6,6 +6,12 @@
 #include "interface.h"
 
 #include <QtGlobal>          // qInstallMessageHandler, QtMsgType
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QTimer>
+#include <QMetaObject>
+#include <QObject>
 #include <QMessageLogContext>
 #include <QString>
 
@@ -213,6 +219,75 @@ void hostMessageHandler(QtMsgType type, const QMessageLogContext &context,
     }
 }
 
+
+// The module's chance to finish, between "stop" and teardown.
+//
+// Budget. The subprocess container gives a module 5s from the stop signal
+// before it resorts to SIGKILL, and everything after this -- `delete logos_api`
+// and the destructor chain that unlinks the QtRO socket -- has to fit in what
+// is left. 3s spends most of the window on the module while keeping a margin
+// that is actually enough for the teardown it precedes.
+constexpr int kUnloadGraceMs = 3000;
+
+// Invoked BY NAME, not through the vtable, and that is the whole reason this is
+// shaped the way it is. `PluginInterface` is compiled into every module .so
+// separately; adding a virtual to it would shift the vtable under every plugin
+// already built and turn a missing hook into undefined behaviour instead of a
+// no-op. `initLogos` is delivered the same way for the same reason.
+//
+// A plugin that does not declare the hook simply has no such meta-method:
+// invokeMethod returns false, we log nothing and move on. That is the common
+// case and it must stay free.
+void runAboutToUnload(QObject* plugin, int graceMs)
+{
+    if (!plugin) return;
+
+    int flag = 0;  // LogosShutdown::Synchronous
+    if (!QMetaObject::invokeMethod(plugin, "aboutToUnload",
+                                   Qt::DirectConnection, Q_RETURN_ARG(int, flag))) {
+        return;  // module predates the hook, or does not want it
+    }
+    if (flag == 0) return;  // Synchronous: already quiescent
+
+    // Asynchronous: the module is finishing. Run a nested event loop rather
+    // than sleeping -- unloadFinished() may arrive as a queued event from a
+    // worker thread, and a module doing its last work almost certainly needs
+    // the loop running to do it. The signal is reached by NAME for the same
+    // ABI reason as the hook itself.
+    QElapsedTimer elapsed;
+    elapsed.start();
+
+    QEventLoop loop;
+    QTimer deadline;
+    deadline.setSingleShot(true);
+    const bool connected = QObject::connect(plugin, SIGNAL(unloadFinished()),
+                                            &loop, SLOT(quit()));
+    if (!connected) {
+        // The module said Asynchronous but exposes no way to say it is done.
+        // Waiting out the full grace period for a signal that cannot arrive
+        // helps nobody.
+        qWarning("module returned Asynchronous from aboutToUnload() but has no "
+                 "unloadFinished() signal; not waiting");
+        return;
+    }
+    QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
+    deadline.start(graceMs);
+    loop.exec();
+
+    // Still armed means the loop was quit by the signal rather than by the
+    // deadline -- the one bit that separates "finished" from "gave up".
+    const bool finished = deadline.isActive();
+    deadline.stop();
+
+    if (!finished) {
+        // Loud, because it costs every teardown of this module the full grace
+        // period and the module is the only thing that can fix it.
+        qWarning("module did not finish unloading within %dms; proceeding", graceMs);
+    } else {
+        qDebug("module finished unloading in %lldms", (long long)elapsed.elapsed());
+    }
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -301,6 +376,10 @@ int main(int argc, char *argv[])
     }
 
     PluginInterface* basePlugin = module.as<PluginInterface>();
+    // Held for the teardown hook below, which reaches the module through the
+    // meta-object rather than the vtable. Captured before release() so it does
+    // not depend on the loader's lifetime.
+    QObject* pluginObject = module.instance();
     LogosAPI* logos_api = initializeLogosAPI(args.name, module.instance(),
                                              basePlugin, authToken, args.hostServices,
                                              args.path,
@@ -313,6 +392,22 @@ int main(int argc, char *argv[])
     }
 
     int result = QtApp::exec();
+
+    // Give the module a chance to finish before anything is torn down.
+    //
+    // exec() has just returned, which means the container asked us to stop
+    // (SIGTERM on POSIX, WM_QUIT on Windows) or an operator did. Everything is
+    // still live at this point -- the plugin, its LogosAPI, its transports --
+    // and that is the only moment a module can flush state or close handles
+    // with the framework still under it. `delete logos_api` below starts
+    // pulling that away.
+    //
+    // The wait is BOUNDED, and deliberately shorter than the container's grace
+    // period: a module that never finishes must cost us a few seconds, not the
+    // whole budget, because whatever is left of that budget is what stands
+    // between a clean exit and SIGKILL.
+    runAboutToUnload(pluginObject, kUnloadGraceMs);
+
     delete logos_api;
     QtApp::cleanup();
 
