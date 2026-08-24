@@ -166,6 +166,8 @@ LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
 
     bool success = logos_api->getProvider()->registerObject(basePlugin->name(), module);
     if (success) {
+        // OUTBOUND half of load-time identity: the child presents this token
+        // when calling core / capability_module.
         logos_api->getTokenManager()->saveToken(std::string("core"), authToken);
         logos_api->getTokenManager()->saveToken(std::string("capability_module"), authToken);
     } else {
