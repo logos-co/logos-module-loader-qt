@@ -24,7 +24,7 @@ pkgs.stdenv.mkDerivation {
       -GNinja \
       -DLOGOS_CPP_SDK_ROOT=${common.env.LOGOS_CPP_SDK_ROOT} \
       -DLOGOS_PROTOCOL_ROOT=${common.env.LOGOS_PROTOCOL_ROOT} \
-      -DLOGOS_QT_SDK_ROOT=${common.env.LOGOS_QT_SDK_ROOT} \
+      -DLOGOS_QT_HOST_ROOT=${common.env.LOGOS_QT_HOST_ROOT} \
       -DLOGOS_MODULE_ROOT=${common.env.LOGOS_MODULE_ROOT} \
       -DLOGOS_CONTAINER_ROOT=${common.env.LOGOS_CONTAINER_ROOT} \
       -DLOGOS_MODULE_LOADER_ROOT=${common.env.LOGOS_MODULE_LOADER_ROOT} \
