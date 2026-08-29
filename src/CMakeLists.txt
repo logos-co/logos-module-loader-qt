@@ -78,8 +78,11 @@ set(LOGOS_HOST_SOURCES
 add_executable(logos_host_qt ${LOGOS_HOST_SOURCES})
 
 # The host reads its auth token from an OS handle (TokenSource, default stdin)
-# named by --token-source, so it depends on NO container package.
+# named by --token-source and writes its load status to stdout, so it depends on
+# no container IMPLEMENTATION. logos_container is header-only and names none: it
+# carries the wording of the status line, which both sides have to agree on.
 target_link_libraries(logos_host_qt PRIVATE
+    logos_container
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::RemoteObjects
