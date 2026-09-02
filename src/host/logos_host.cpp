@@ -5,6 +5,8 @@
 #include "logos_api.h"
 #include "interface.h"
 
+#include <logos_container/load_status.h>
+
 #include <QtGlobal>          // qInstallMessageHandler, QtMsgType
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -16,7 +18,9 @@
 #include <QString>
 
 #include <cerrno>
+#include <cstdio>
 #include <csignal>
+#include <string>
 #include <cstddef>
 #include <cstdint>
 #include <thread>
@@ -30,6 +34,29 @@
 #endif
 
 namespace {
+
+// The daemon can see that we were spawned; only we can see whether the plugin
+// behind us loaded. This is that fact, in the form logos-container defines --
+// and it is "plugin loaded", not "ready": it goes out before the event loop
+// starts, so before the module has published anything.
+//
+// The status is ONE line, so the reason is flattened, and the leading newline
+// keeps it off the end of an unterminated write by another logger on stdout
+// (the empty line that costs is one the container already skips).
+void reportLoadStatus(bool ok, std::string reason = {})
+{
+    for (char& c : reason)
+        if (c == '\n' || c == '\r') c = ' ';
+
+    if (ok)
+        std::fprintf(stdout, "\n%s %s\n",
+                     LogosCore::kLoadStatusPrefix, LogosCore::kLoadStatusOk);
+    else
+        std::fprintf(stdout, "\n%s %s %s\n",
+                     LogosCore::kLoadStatusPrefix, LogosCore::kLoadStatusFailed,
+                     reason.c_str());
+    std::fflush(stdout);
+}
 
 #ifndef _WIN32
 
@@ -366,12 +393,18 @@ int main(int argc, char *argv[])
     // file:<path> instead, with no change here.
     std::string authToken = TokenSource::read(args.tokenSource);
     if (authToken.empty()) {
+        reportLoadStatus(false, "no auth token arrived on " +
+                                (args.tokenSource.empty() ? std::string("stdin")
+                                                          : args.tokenSource));
         return 1;
     }
 
     // Runtime concern: load the Qt plugin and initialize LogosAPI.
-    ModuleLib::LogosModule module = loadModule(args.path, args.name);
+    std::string loadError;
+    ModuleLib::LogosModule module = loadModule(args.path, args.name, &loadError);
     if (!module.isValid()) {
+        reportLoadStatus(false, loadError.empty() ? "the plugin could not be loaded"
+                                                  : loadError);
         return 1;
     }
 
@@ -388,8 +421,14 @@ int main(int argc, char *argv[])
     module.release();
 
     if (!logos_api) {
+        reportLoadStatus(false, "LogosAPI could not be initialised for this module");
         return 1;
     }
+
+    // The plugin is loaded and its LogosAPI is up. Everything after this is the
+    // module's own runtime, so this is the last moment at which a failure is
+    // still a LOAD failure.
+    reportLoadStatus(true);
 
     int result = QtApp::exec();
 

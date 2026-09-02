@@ -52,32 +52,33 @@ std::string decodeTransportSetArg(const std::string& arg)
 
 } // namespace
 
-LogosModule loadModule(const std::string& modulePath, const std::string& expectedName)
+LogosModule loadModule(const std::string& modulePath, const std::string& expectedName,
+                        std::string* error)
 {
+    auto fail = [error](std::string why) {
+        spdlog::critical("{}", why);
+        if (error) *error = std::move(why);
+        return LogosModule();
+    };
+
     std::string errorString;
     LogosModule module = LogosModule::loadFromPath(modulePath, &errorString);
 
-    if (!module.isValid()) {
-        spdlog::critical("Failed to load module: {}", errorString);
-        return LogosModule();
-    }
+    if (!module.isValid())
+        return fail("failed to load the plugin: " + errorString);
 
     PluginInterface *basePlugin = module.as<PluginInterface>();
-    if (!basePlugin) {
-        spdlog::critical("Module does not implement the PluginInterface");
-        return LogosModule();
-    }
+    if (!basePlugin)
+        return fail("the plugin does not implement PluginInterface");
 
     // Defense-in-depth against privileged-name impersonation (F-022). The
     // parent passes the trusted registry key as `expectedName`; the plugin's
     // own name() is its self-asserted identity. If they disagree, the binary
     // is not the module it was loaded as — refuse to initialize it rather than
     // let it run (and receive tokens) under a name it doesn't implement.
-    if (expectedName != basePlugin->name().toStdString()) {
-        spdlog::critical("Refusing module: name mismatch, expected '{}' got '{}'",
-                         expectedName, basePlugin->name().toStdString());
-        return LogosModule();
-    }
+    if (expectedName != basePlugin->name().toStdString())
+        return fail("plugin name mismatch: expected '" + expectedName + "', got '" +
+                    basePlugin->name().toStdString() + "'");
 
     return module;
 }
