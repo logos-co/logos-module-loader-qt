@@ -5,6 +5,11 @@
 
 struct ModuleArgs {
     std::string name;
+    // Path to the module file, always ABSOLUTE: a relative --path is resolved
+    // against the process working directory during parsing (ModulePath::resolve).
+    // Qt does not do this for us — QPluginLoader searches the Qt plugin path for
+    // a relative name, not the working directory — so the host does it before
+    // the loader, and before this struct, ever sees the path.
     std::string path;
     std::string instancePersistencePath;
     // Per-module transport set, serialized as JSON (the format defined

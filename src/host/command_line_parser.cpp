@@ -1,4 +1,5 @@
 #include "command_line_parser.h"
+#include "module_path.h"
 #include <CLI/CLI.hpp>
 
 ModuleArgs parseCommandLineArgs(int argc, char *argv[])
@@ -11,7 +12,9 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
 
     app.add_option("-n,--name", result.name, "Name of the module to load")
         ->required();
-    app.add_option("-p,--path", result.path, "Path to the module file")
+    app.add_option("-p,--path", result.path,
+        "Path to the module file; relative paths are taken from the working "
+        "directory")
         ->required();
     app.add_option("--instance-persistence-path", result.instancePersistencePath,
         "Instance persistence directory for the module");
@@ -31,6 +34,14 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
         app.exit(e);
         return result;
     }
+
+    // Resolve --path HERE, so nothing downstream ever holds a relative one.
+    // Qt would not resolve it the way the caller means: QPluginLoader searches
+    // the Qt PLUGIN path for a relative name, never the working directory, and
+    // answers a miss with "The shared library was not found." — see
+    // module_path.h. The daemon always passes an absolute path and is
+    // unaffected; this is for a human running the host by hand.
+    result.path = ModulePath::resolve(result.path);
 
     result.valid = true;
     return result;

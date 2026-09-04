@@ -15,6 +15,7 @@
 #include "logos_transport_config_json.h"
 #include "token_manager.h"
 #include "module_lib.h"
+#include "module_path.h"
 
 namespace fs = std::filesystem;
 
@@ -61,11 +62,22 @@ LogosModule loadModule(const std::string& modulePath, const std::string& expecte
         return LogosModule();
     };
 
+    // Ask the filesystem before asking the loader, because Qt answers both
+    // questions with the same sentence. QPluginLoader::errorString() reports a
+    // path it could not resolve as "The shared library was not found." — which
+    // reads as a missing transitive dependency of a plugin that was found, and
+    // sends the reader looking for a bug that is not there. Splitting the two
+    // costs one stat() per module load, once, at startup.
+    if (const std::string problem = ModulePath::fileProblem(modulePath); !problem.empty())
+        return fail(problem);
+
     std::string errorString;
     LogosModule module = LogosModule::loadFromPath(modulePath, &errorString);
 
     if (!module.isValid())
-        return fail("failed to load the plugin: " + errorString);
+        return fail("failed to load the plugin at " + modulePath +
+                    " (the file is there, so this is its format or something it "
+                    "links against): " + errorString);
 
     PluginInterface *basePlugin = module.as<PluginInterface>();
     if (!basePlugin)
