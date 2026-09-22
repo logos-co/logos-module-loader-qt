@@ -45,6 +45,26 @@ for existing binaries that do not yet carry the adjacent metadata sidecar.
 A `logos_host` → `logos_host_qt` compatibility symlink is installed so frontends
 keep working with either name.
 
+## Windows DLL dependencies
+
+Before loading its plugin, the dedicated `logos_host_qt` process enables
+`LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` and registers the plugin's absolute directory
+with `AddDllDirectory`. The registration lasts until process exit, so libraries
+loaded later by bare name (for example `libpq.dll`) and their dependencies can
+be bundled beside the plugin without module-specific search-path code.
+
+The host executable's directory and System32 remain searchable. The current
+working directory and `PATH` are excluded from DLL searching; package runtime
+libraries beside the plugin or host instead of relying on either. This does not
+change executable lookup through `PATH`, nor resolve the host's own startup
+imports before `main()` runs. Setup failures abort module loading and use the
+normal host load-failure report, including the failing API and Windows error.
+
+This policy belongs only to the child hosting one module. It does not add all
+installed module directories to the parent, change shared-process plugin
+loaders, or replace logos-module's per-load handling of immediate DLL imports.
+Linux and macOS continue to use their packaged runtime paths.
+
 ## Consuming it
 
 This package installs a generic CMake config so a consumer selects "the
@@ -67,3 +87,10 @@ frontends bundle them; liblogos re-exports them.)
 nix build .#logos-module-loader-qt              # lib + header + host binary
 nix build .#checks.aarch64-linux.tests -L       # run the loader + token-source tests
 ```
+
+The Windows workflow cross-builds `logos-module-loader-qt-tests`, then runs it
+and the DLL-search regression on native Windows. The regression first proves
+the initial plugin load alone cannot find a later dependency, then enables the
+host policy in a fresh process and checks that dependency and its transitive
+import. It also checks Unicode/spaced paths, host/System32 lookup, and exclusion
+of libraries available only through the current directory or `PATH`.

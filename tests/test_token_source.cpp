@@ -148,8 +148,10 @@ TEST(TokenSource, TimesOutWhenNoDataArrives) {
                                               /*timeout_ms=*/200);
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0).count();
-    ::close(fds[0]);
+    // On Windows the timed-out read continues on a detached thread and holds
+    // the CRT read-fd lock. Send EOF before closing that fd, or cleanup blocks.
     ::close(fds[1]);
+    ::close(fds[0]);
     EXPECT_TRUE(tok.empty());
     EXPECT_GE(elapsed, 150) << "should wait out the timeout, not return early";
     EXPECT_LT(elapsed, 1500) << "should not block well past the timeout";

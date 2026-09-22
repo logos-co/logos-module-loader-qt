@@ -38,3 +38,7 @@ if(UNIX)
     target_include_directories(plain_host_fixture PRIVATE
         ${LOGOS_PROTOCOL_ROOT}/include)
 endif()
+
+if(WIN32)
+    add_subdirectory(windows)
+endif()

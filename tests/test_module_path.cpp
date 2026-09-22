@@ -156,11 +156,10 @@ TEST(ModulePathResolve, DropsRedundantDotComponents) {
     EXPECT_TRUE(fs::equivalent(resolved, dir.path() / "modules/demo_plugin.so"));
 }
 
-TEST(ModulePathResolve, KeepsDotDotRatherThanCollapsingIt) {
-    // The other half of the same rule, and the reason it is not just
-    // lexically_normal(): collapsing ".." names a DIFFERENT file whenever a
-    // symlink sits above it. Adding the working directory is this function's
-    // whole job; deciding which file is the loader's.
+TEST(ModulePathResolve, ResolvesParentDirectory) {
+    // On POSIX, keep "..": lexically collapsing it can name a different file
+    // when a symlink sits above it. Windows absolute() already normalizes it;
+    // on either platform the resolved path must still name the intended file.
     TempDir dir("resolve_dotdot");
     fs::create_directories(dir.path() / "sub");
     writeFile(dir.path() / "demo_plugin.so", "not really a plugin");
@@ -168,7 +167,10 @@ TEST(ModulePathResolve, KeepsDotDotRatherThanCollapsingIt) {
 
     const std::string resolved = ModulePath::resolve("../demo_plugin.so");
 
+    EXPECT_TRUE(fs::path(resolved).is_absolute()) << resolved;
+#ifndef _WIN32
     EXPECT_NE(std::string::npos, resolved.find("..")) << resolved;
+#endif
     ASSERT_TRUE(fs::exists(resolved)) << resolved;
     EXPECT_TRUE(fs::equivalent(resolved, dir.path() / "demo_plugin.so"));
 }

@@ -71,6 +71,8 @@ set(LOGOS_HOST_SOURCES
     host/command_line_parser.h
     host/module_initializer.cpp
     host/module_initializer.h
+    host/module_dll_search.cpp
+    host/module_dll_search.h
     host/module_path.cpp
     host/module_path.h
     host/token_source.cpp

@@ -16,6 +16,7 @@
 #include "token_manager.h"
 #include "module_lib.h"
 #include "module_path.h"
+#include "module_dll_search.h"
 
 namespace fs = std::filesystem;
 
@@ -69,6 +70,11 @@ LogosModule loadModule(const std::string& modulePath, const std::string& expecte
     // sends the reader looking for a bug that is not there. Splitting the two
     // costs one stat() per module load, once, at startup.
     if (const std::string problem = ModulePath::fileProblem(modulePath); !problem.empty())
+        return fail(problem);
+
+    // This runs in the dedicated child, before the plugin or its initializers.
+    // Keep its directory searchable for libraries loaded later by bare name.
+    if (const std::string problem = ModuleDllSearch::configure(modulePath); !problem.empty())
         return fail(problem);
 
     std::string errorString;

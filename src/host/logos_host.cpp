@@ -363,9 +363,10 @@ int main(int argc, char *argv[])
     {
         const pid_t daemon_pid = ::getppid();
 #ifdef __linux__
-        // Kernel-level + immediate. PR_SET_PDEATHSIG fires when the thread that
-        // forked us exits; that is the daemon's long-lived event-loop/io thread,
-        // so it only fires on real daemon death.
+        // Kernel-level + immediate. PR_SET_PDEATHSIG fires when the THREAD that
+        // spawned us exits, so it means daemon death only because the container
+        // spawns from a thread that lives as long as the daemon (SpawnRuntime in
+        // logos-container-subprocess).
         ::prctl(PR_SET_PDEATHSIG, SIGKILL);
 #endif
         // Race guard: if the daemon already died between fork() and now, our
