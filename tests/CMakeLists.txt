@@ -33,3 +33,12 @@ gtest_discover_tests(logos_module_loader_qt_tests DISCOVERY_MODE PRE_TEST)
 if(WIN32)
     add_subdirectory(windows)
 endif()
+
+# The native host regression fixture is a real module-impl C ABI library. The
+# Python check starts the packaged logos_host_plain and calls it over the
+# production plain protocol; keep it off Windows, where mmap is unavailable.
+if(UNIX)
+    add_library(plain_host_fixture SHARED plain_host_fixture.cpp)
+    target_include_directories(plain_host_fixture PRIVATE
+        ${LOGOS_PROTOCOL_ROOT}/include)
+endif()

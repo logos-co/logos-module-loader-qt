@@ -83,17 +83,22 @@
         }
       );
 
-      checks = forAllSystems ({ pkgs, system, ... }:
+      checks = forAllSystems ({ pkgs, system, logosProtocolPkg, ... }:
         let
           testsPkg = self.packages.${system}.logos-module-loader-qt-tests;
+          hostPkg = self.packages.${system}.logos-module-loader-qt-bin;
         in
         {
           tests = pkgs.runCommand "logos-module-loader-qt-tests"
             {
-              nativeBuildInputs = [ testsPkg ];
+              nativeBuildInputs = [ testsPkg pkgs.python3 ];
             } ''
             echo "Running logos-module-loader-qt tests..."
             ${testsPkg}/bin/logos_module_loader_qt_tests
+            ${pkgs.python3}/bin/python3 ${./tests/test_plain_host.py} \
+              ${hostPkg}/bin/logos_host_plain \
+              ${testsPkg}/lib \
+              ${logosProtocolPkg}/lib
             mkdir -p $out
             touch $out/.tests-passed
           '';
