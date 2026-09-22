@@ -7,8 +7,11 @@
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-protocol.url = "github:logos-co/logos-protocol/codex/qt-remote-plain";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/codex/qt-remote-plain-plugin";
+    logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
     logos-container.url = "github:logos-co/logos-container";
