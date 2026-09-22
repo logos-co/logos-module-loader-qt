@@ -158,25 +158,61 @@ std::string hostServicesJson(const std::string& csv)
 struct Runtime {
     ModuleAbi abi;
     lp_provider* provider = nullptr;
-    std::recursive_mutex dispatchMutex;
+    std::mutex dispatchMutex;
+    std::condition_variable dispatchChanged;
+    std::size_t activeDispatches = 0;
+    std::size_t maxDispatches = 1;
     std::mutex unloadMutex;
     std::condition_variable unloadChanged;
     bool unloadDone = false;
 };
 
+class DispatchSlot {
+public:
+    explicit DispatchSlot(Runtime& runtime) : m_runtime(runtime)
+    {
+        std::unique_lock<std::mutex> lock(m_runtime.dispatchMutex);
+        m_runtime.dispatchChanged.wait(lock, [&] {
+            return m_runtime.activeDispatches < m_runtime.maxDispatches;
+        });
+        ++m_runtime.activeDispatches;
+    }
+
+    ~DispatchSlot()
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_runtime.dispatchMutex);
+            --m_runtime.activeDispatches;
+        }
+        m_runtime.dispatchChanged.notify_one();
+    }
+
+private:
+    Runtime& m_runtime;
+};
+
+char* copyForProtocol(Runtime& runtime, char* moduleText)
+{
+    if (!moduleText) return nullptr;
+    char* copy = lp_string_copy(moduleText);
+    runtime.abi.stringFree(moduleText);
+    return copy;
+}
+
 char* dispatch(const char* method, const char* args, void* userData)
 {
     auto& runtime = *static_cast<Runtime*>(userData);
-    std::lock_guard<std::recursive_mutex> lock(runtime.dispatchMutex);
+    DispatchSlot slot(runtime);
     runtime.abi.setCallCaller(lp_current_caller_json());
-    char* result = runtime.abi.dispatch(method, args);
+    char* result = copyForProtocol(runtime, runtime.abi.dispatch(method, args));
     runtime.abi.setCallCaller(nullptr);
     return result;
 }
 
 char* getMethods(void* userData)
 {
-    return static_cast<Runtime*>(userData)->abi.getMethods();
+    auto& runtime = *static_cast<Runtime*>(userData);
+    return copyForProtocol(runtime, runtime.abi.getMethods());
 }
 
 int acceptInboundToken(const char* module, const char* token, void* userData)
@@ -259,6 +295,12 @@ int main(int argc, char** argv)
     }
 
     Runtime runtime;
+    if (args.concurrency == "multi") {
+        const unsigned hardware = std::thread::hardware_concurrency();
+        runtime.maxDispatches = args.maxWorkers > 0
+            ? static_cast<std::size_t>(args.maxWorkers)
+            : static_cast<std::size_t>(hardware > 0 ? hardware : 1);
+    }
     if (!runtime.abi.resolve(library, error)) {
         reportLoadStatus(false, error);
         return 1;
@@ -284,11 +326,11 @@ int main(int argc, char** argv)
         lp_provider_destroy(runtime.provider);
         return 1;
     }
-    const int publishStatus = lp_provider_register(
+    const int prepareStatus = lp_provider_prepare(
         runtime.provider, &dispatch, &getMethods, &acceptInboundToken, &runtime);
-    if (publishStatus != LP_OK) {
-        reportLoadStatus(false, "qt_remote_plain provider could not be published (status "
-            + std::to_string(publishStatus) + ")");
+    if (prepareStatus != LP_OK) {
+        reportLoadStatus(false, "qt_remote_plain provider handshake could not be published (status "
+            + std::to_string(prepareStatus) + ")");
         if (runtime.provider) lp_provider_destroy(runtime.provider);
         return 1;
     }
@@ -315,6 +357,16 @@ int main(int argc, char** argv)
     const std::string moduleDir = std::filesystem::absolute(args.path).parent_path().string();
     runtime.abi.setContext(moduleDir.c_str(), instance.c_str(),
                            args.instancePersistencePath.c_str());
+
+    const int publishStatus = lp_provider_register(
+        runtime.provider, &dispatch, &getMethods, &acceptInboundToken, &runtime);
+    if (publishStatus != LP_OK) {
+        reportLoadStatus(false, "qt_remote_plain business provider could not be published (status "
+            + std::to_string(publishStatus) + ")");
+        lp_provider_destroy(runtime.provider);
+        runtime.provider = nullptr;
+        return 1;
+    }
 
 #ifdef _WIN32
     SetConsoleCtrlHandler(&consoleHandler, TRUE);

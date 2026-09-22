@@ -43,6 +43,11 @@ struct ModuleArgs {
     // cdylib module forwards it across the module-impl C ABI into its OWN
     // image, which is the only image whose gates it can open.
     std::string hostServices;
+    // Dispatch policy for a native cdylib. "single" is the compatibility
+    // default; "multi" admits up to maxWorkers calls at once. Zero selects a
+    // bounded hardware-derived default.
+    std::string concurrency = "single";
+    int maxWorkers = 0;
     bool valid;
 };
 
