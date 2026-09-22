@@ -196,5 +196,22 @@ std::vector<std::string> QtPluginFormatLoader::buildArguments(const LogosCore::M
         args.push_back(services);
     }
 
+    if (desc.format == "native-cdylib" && desc.rawMetadata.is_object()) {
+        const auto concurrencyIt = desc.rawMetadata.find("concurrency");
+        const std::string concurrency = concurrencyIt != desc.rawMetadata.end()
+                && concurrencyIt->is_string()
+            ? concurrencyIt->get<std::string>() : "single";
+        if (concurrency == "multi") {
+            args.push_back("--concurrency");
+            args.push_back("multi");
+            const auto workersIt = desc.rawMetadata.find("max_workers");
+            if (workersIt != desc.rawMetadata.end() && workersIt->is_number_integer()
+                && workersIt->get<int>() > 0) {
+                args.push_back("--max-workers");
+                args.push_back(std::to_string(workersIt->get<int>()));
+            }
+        }
+    }
+
     return args;
 }

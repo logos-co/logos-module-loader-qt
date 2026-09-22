@@ -27,6 +27,11 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
         "Privileged host services granted to this module, as a bare "
         "comma-separated list (e.g. token_registry,token_delivery); "
         "empty (the default) means none");
+    app.add_option("--concurrency", result.concurrency,
+        "Native module dispatch mode: single (default) or multi");
+    app.add_option("--max-workers", result.maxWorkers,
+        "Maximum concurrent native dispatches in multi mode; zero selects a "
+        "bounded hardware-derived default");
 
     try {
         app.parse(argc, argv);
@@ -44,6 +49,11 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
         return result;
     }
     if (result.name.empty() || result.path.empty()) {
+        return result;
+    }
+    if ((result.concurrency != "single" && result.concurrency != "multi")
+        || result.maxWorkers < 0
+        || (result.concurrency != "multi" && result.maxWorkers != 0)) {
         return result;
     }
 
