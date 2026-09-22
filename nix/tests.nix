@@ -1,9 +1,10 @@
-# Builds and runs the loader + token-source tests.
+# Builds the loader/host tests; flake checks and Windows CI run them.
 { pkgs, common, build }:
 
 pkgs.stdenv.mkDerivation {
   pname = "${common.pname}-tests";
   version = common.version;
+  dontWrapQtApps = true;
 
   inherit (build) src;
   inherit (common) buildInputs meta env;
@@ -14,40 +15,17 @@ pkgs.stdenv.mkDerivation {
 
   cmakeFlags = common.cmakeFlags;
 
-  configurePhase = ''
-    runHook preConfigure
-
-    cp -r ${build}/* .
-    chmod -R u+w .
-
-    cmake -B build -S ${build.src} \
-      -GNinja \
-      -DLOGOS_CPP_SDK_ROOT=${common.env.LOGOS_CPP_SDK_ROOT} \
-      -DLOGOS_PROTOCOL_ROOT=${common.env.LOGOS_PROTOCOL_ROOT} \
-      -DLOGOS_QT_SDK_ROOT=${common.env.LOGOS_QT_SDK_ROOT} \
-      -DLOGOS_MODULE_ROOT=${common.env.LOGOS_MODULE_ROOT} \
-      -DLOGOS_CONTAINER_ROOT=${common.env.LOGOS_CONTAINER_ROOT} \
-      -DLOGOS_MODULE_LOADER_ROOT=${common.env.LOGOS_MODULE_LOADER_ROOT} \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_INSTALL_PREFIX=$out
-
-    runHook postConfigure
-  '';
-
-  buildPhase = ''
-    runHook preBuild
-
-    cd build
-    ninja logos_module_loader_qt_tests
-
-    runHook postBuild
-  '';
+  # Use the standard CMake/Ninja phases so the cross toolchain and
+  # logosQtCrossCmakeFlags reach configuration as well as the native flags.
 
   installPhase = ''
     runHook preInstall
 
     mkdir -p $out/bin
-    cp bin/logos_module_loader_qt_tests $out/bin/
+    cp bin/logos_module_loader_qt_tests${pkgs.stdenv.hostPlatform.extensions.executable} $out/bin/
+    ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isWindows ''
+      cp -r windows-tests/* $out/bin/
+    ''}
 
     mkdir -p $out/lib
     cp -r lib/* $out/lib/ 2>/dev/null || true
