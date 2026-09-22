@@ -4,6 +4,10 @@
 #include <string>
 
 struct ModuleArgs {
+    // Metadata-only compatibility mode. The Qt host reads Q_PLUGIN_METADATA,
+    // writes the inner metadata JSON to stdout, and exits without loading or
+    // starting the module. This keeps Qt metadata parsing out of liblogos.
+    std::string inspectPath;
     std::string name;
     // Path to the module file, always ABSOLUTE: a relative --path is resolved
     // against the process working directory during parsing (ModulePath::resolve).

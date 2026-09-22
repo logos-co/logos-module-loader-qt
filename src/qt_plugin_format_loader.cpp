@@ -106,8 +106,11 @@ std::string base64Encode(const std::string& in)
     return out;
 }
 
-fs::path findInDir(const fs::path& dir) {
-    for (const auto& name : {"logos_host_qt", "logos_host"}) {
+fs::path findInDir(const fs::path& dir, bool plain) {
+    const std::vector<std::string> names = plain
+        ? std::vector<std::string>{"logos_host_plain"}
+        : std::vector<std::string>{"logos_host_qt", "logos_host"};
+    for (const auto& name : names) {
         auto candidate = (dir / (std::string(name) + kExeSuffix)).lexically_normal();
         if (fs::exists(candidate))
             return candidate;
@@ -115,15 +118,15 @@ fs::path findInDir(const fs::path& dir) {
     return {};
 }
 
-std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs) {
+std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs, bool plain) {
     std::string logosHostPath;
 
-    const char* envPath = std::getenv("LOGOS_HOST_PATH");
+    const char* envPath = std::getenv(plain ? "LOGOS_HOST_PLAIN_PATH" : "LOGOS_HOST_PATH");
     if (envPath)
         logosHostPath = envPath;
 
     if (logosHostPath.empty()) {
-        auto found = findInDir(fs::path(boost::dll::program_location().parent_path().string()));
+        auto found = findInDir(fs::path(boost::dll::program_location().parent_path().string()), plain);
         if (!found.empty())
             logosHostPath = found.string();
     }
@@ -133,15 +136,16 @@ std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs) {
             auto binDir = fs::absolute(
                 fs::path(modulesDirs.front()) / ".." / "bin"
             ).lexically_normal();
-            auto found = findInDir(binDir);
+            auto found = findInDir(binDir, plain);
             if (!found.empty())
                 logosHostPath = found.string();
         }
     }
 
     if (logosHostPath.empty() || !fs::exists(logosHostPath)) {
-        spdlog::critical("logos_host_qt (or logos_host) not found - set LOGOS_HOST_PATH or place it next to the executable (last tried: {})",
-                         logosHostPath);
+        spdlog::critical("{} not found - set {} or place it next to the executable (last tried: {})",
+                         plain ? "logos_host_plain" : "logos_host_qt (or logos_host)",
+                         plain ? "LOGOS_HOST_PLAIN_PATH" : "LOGOS_HOST_PATH", logosHostPath);
         return {};
     }
 
@@ -152,12 +156,13 @@ std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs) {
 
 bool QtPluginFormatLoader::canHandle(const LogosCore::ModuleDescriptor& desc) const
 {
-    return desc.format == "qt-plugin" || desc.format.empty();
+    return desc.format == "qt-plugin" || desc.format == "native-cdylib"
+        || desc.format.empty();
 }
 
 std::string QtPluginFormatLoader::resolveHostBinary(const LogosCore::ModuleDescriptor& desc) const
 {
-    return resolveLogosHostPath(desc.modulesDirs);
+    return resolveLogosHostPath(desc.modulesDirs, desc.format == "native-cdylib");
 }
 
 std::vector<std::string> QtPluginFormatLoader::buildArguments(const LogosCore::ModuleDescriptor& desc) const

@@ -319,6 +319,26 @@ void runAboutToUnload(QObject* plugin, int graceMs)
 
 int main(int argc, char *argv[])
 {
+    ModuleArgs args = parseCommandLineArgs(argc, argv);
+    if (!args.valid) {
+        return 1;
+    }
+
+    if (!args.inspectPath.empty()) {
+        qInstallMessageHandler(hostMessageHandler);
+        QtApp::init(argc, argv);
+        const auto metadata = ModuleLib::LogosModule::extractMetadata(args.inspectPath);
+        if (!metadata || !metadata->isValid()) {
+            QtApp::cleanup();
+            return 1;
+        }
+        std::fputs(metadata->rawMetadataJson.c_str(), stdout);
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+        QtApp::cleanup();
+        return 0;
+    }
+
 #ifndef _WIN32
     // Isolate this module subprocess into its own session/process group, up
     // front. The host is spawned in the daemon's process group, which is in turn
@@ -364,11 +384,6 @@ int main(int argc, char *argv[])
         }).detach();
     }
 #endif
-
-    ModuleArgs args = parseCommandLineArgs(argc, argv);
-    if (!args.valid) {
-        return 1;
-    }
 
     installCrashHandler(args.name.c_str());
 

@@ -34,6 +34,12 @@ TEST_F(QtPluginFormatLoaderTest, CanHandle_AcceptsQtPluginFormat) {
     EXPECT_TRUE(loader.canHandle(desc));
 }
 
+TEST_F(QtPluginFormatLoaderTest, CanHandle_AcceptsNativeCdylibFormat) {
+    LogosCore::ModuleDescriptor desc;
+    desc.format = "native-cdylib";
+    EXPECT_TRUE(loader.canHandle(desc));
+}
+
 TEST_F(QtPluginFormatLoaderTest, CanHandle_AcceptsEmptyFormat) {
     LogosCore::ModuleDescriptor desc;
     desc.format = "";

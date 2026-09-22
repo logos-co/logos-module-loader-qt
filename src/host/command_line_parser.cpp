@@ -10,12 +10,12 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
     CLI::App app{"Logos host for loading modules in separate processes"};
     app.set_version_flag("-v,--version", "1.0");
 
-    app.add_option("-n,--name", result.name, "Name of the module to load")
-        ->required();
+    app.add_option("--inspect", result.inspectPath,
+        "Print a Qt plugin's embedded Logos metadata as JSON and exit");
+    app.add_option("-n,--name", result.name, "Name of the module to load");
     app.add_option("-p,--path", result.path,
         "Path to the module file; relative paths are taken from the working "
-        "directory")
-        ->required();
+        "directory");
     app.add_option("--instance-persistence-path", result.instancePersistencePath,
         "Instance persistence directory for the module");
     app.add_option("--transport-set", result.transportSetJson,
@@ -32,6 +32,18 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
         app.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
         app.exit(e);
+        return result;
+    }
+
+    if (!result.inspectPath.empty()) {
+        if (!result.name.empty() || !result.path.empty()) {
+            return result;
+        }
+        result.inspectPath = ModulePath::resolve(result.inspectPath);
+        result.valid = true;
+        return result;
+    }
+    if (result.name.empty() || result.path.empty()) {
         return result;
     }
 
