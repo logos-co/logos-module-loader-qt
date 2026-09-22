@@ -38,7 +38,7 @@ pkgs.stdenv.mkDerivation {
     runHook preBuild
 
     cd build
-    ninja logos_module_loader_qt_tests
+    ninja logos_module_loader_qt_tests ${pkgs.lib.optionalString (!pkgs.stdenv.hostPlatform.isWindows) "plain_host_fixture"}
 
     runHook postBuild
   '';
