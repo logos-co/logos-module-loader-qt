@@ -105,7 +105,7 @@ set_target_properties(logos_host_plain PROPERTIES
     INSTALL_RPATH "$ORIGIN/../lib"
     BUILD_WITH_INSTALL_RPATH TRUE)
 
-# The host reads its auth token from an OS handle (TokenSource, default stdin)
+# The host reads its auth token from an OS handle (HostTokenSource, default stdin)
 # named by --token-source and writes its load status to stdout, so it depends on
 # no container IMPLEMENTATION. logos_container is header-only and names none: it
 # carries the wording of the status line, which both sides have to agree on.

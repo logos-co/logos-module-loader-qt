@@ -240,7 +240,7 @@ int main(int argc, char** argv)
     ModuleArgs args = parseCommandLineArgs(argc, argv);
     if (!args.valid) return 1;
 
-    const std::string token = TokenSource::read(args.tokenSource);
+    const std::string token = HostTokenSource::read(args.tokenSource);
     if (token.empty()) {
         reportLoadStatus(false, "no auth token arrived on "
             + (args.tokenSource.empty() ? std::string("stdin") : args.tokenSource));

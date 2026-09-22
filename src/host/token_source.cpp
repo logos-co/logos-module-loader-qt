@@ -19,7 +19,7 @@
 #include <cstdlib>
 #include <string>
 
-namespace TokenSource {
+namespace HostTokenSource {
 
 namespace {
 
@@ -168,4 +168,4 @@ std::string read(const std::string& source, int timeout_ms) {
     return token;
 }
 
-}  // namespace TokenSource
+}  // namespace HostTokenSource

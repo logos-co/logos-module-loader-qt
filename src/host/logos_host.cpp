@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
     // depends on no container implementation. The subprocess container writes
     // the token to our stdin; a Docker/sandbox container could pass fd:<n> or
     // file:<path> instead, with no change here.
-    std::string authToken = TokenSource::read(args.tokenSource);
+    std::string authToken = HostTokenSource::read(args.tokenSource);
     if (authToken.empty()) {
         reportLoadStatus(false, "no auth token arrived on " +
                                 (args.tokenSource.empty() ? std::string("stdin")
