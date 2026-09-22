@@ -22,7 +22,7 @@ struct ModuleArgs {
     // behaviour for modules the daemon hasn't configured.
     std::string transportSetJson;
     // Where to read the auth token from, set by the container that spawned us
-    // (see TokenSource). Empty means "stdin" — the default the subprocess
+    // (see HostTokenSource). Empty means "stdin" — the default the subprocess
     // container uses. A different container could pass "fd:<n>" or
     // "file:<path>". The host stays agnostic to which container it runs under.
     std::string tokenSource;

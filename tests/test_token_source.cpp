@@ -92,7 +92,7 @@ int pipeWith(const std::string& data) {
 TEST(TokenSource, ReadsFromFdStripsNewline) {
     const int rfd = pipeWith("my-secret-token\n");
     ASSERT_GE(rfd, 0);
-    const std::string tok = TokenSource::read("fd:" + std::to_string(rfd));
+    const std::string tok = HostTokenSource::read("fd:" + std::to_string(rfd));
     ::close(rfd);
     EXPECT_EQ(tok, "my-secret-token");
 }
@@ -100,7 +100,7 @@ TEST(TokenSource, ReadsFromFdStripsNewline) {
 TEST(TokenSource, ReadsFromFdWithoutNewlineAtEof) {
     const int rfd = pipeWith("no-newline-token");
     ASSERT_GE(rfd, 0);
-    const std::string tok = TokenSource::read("fd:" + std::to_string(rfd));
+    const std::string tok = HostTokenSource::read("fd:" + std::to_string(rfd));
     ::close(rfd);
     EXPECT_EQ(tok, "no-newline-token");
 }
@@ -108,7 +108,7 @@ TEST(TokenSource, ReadsFromFdWithoutNewlineAtEof) {
 TEST(TokenSource, ReadsOnlyFirstLine) {
     const int rfd = pipeWith("first-line\nsecond-line\n");
     ASSERT_GE(rfd, 0);
-    const std::string tok = TokenSource::read("fd:" + std::to_string(rfd));
+    const std::string tok = HostTokenSource::read("fd:" + std::to_string(rfd));
     ::close(rfd);
     EXPECT_EQ(tok, "first-line");
 }
@@ -121,21 +121,21 @@ TEST(TokenSource, ReadsFromFile) {
     ASSERT_GT(writeFd(fd, contents, std::strlen(contents)), 0);
     ::close(fd);
 
-    const std::string tok = TokenSource::read(std::string("file:") + path);
+    const std::string tok = HostTokenSource::read(std::string("file:") + path);
     std::remove(path.c_str());
     EXPECT_EQ(tok, "file-token");
 }
 
 TEST(TokenSource, UnknownSourceReturnsEmpty) {
-    EXPECT_TRUE(TokenSource::read("carrier-pigeon").empty());
+    EXPECT_TRUE(HostTokenSource::read("carrier-pigeon").empty());
 }
 
 TEST(TokenSource, InvalidFdSpecReturnsEmpty) {
-    EXPECT_TRUE(TokenSource::read("fd:notanumber").empty());
+    EXPECT_TRUE(HostTokenSource::read("fd:notanumber").empty());
 }
 
 TEST(TokenSource, MissingFileReturnsEmpty) {
-    EXPECT_TRUE(TokenSource::read("file:/no/such/path/logos_token").empty());
+    EXPECT_TRUE(HostTokenSource::read("file:/no/such/path/logos_token").empty());
 }
 
 TEST(TokenSource, TimesOutWhenNoDataArrives) {
@@ -144,7 +144,7 @@ TEST(TokenSource, TimesOutWhenNoDataArrives) {
     int fds[2];
     ASSERT_EQ(makePipe(fds), 0);
     const auto t0 = std::chrono::steady_clock::now();
-    const std::string tok = TokenSource::read("fd:" + std::to_string(fds[0]),
+    const std::string tok = HostTokenSource::read("fd:" + std::to_string(fds[0]),
                                               /*timeout_ms=*/200);
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0).count();
