@@ -161,8 +161,34 @@ def test_concurrency(mode: str, workers: int):
         session.close()
 
 
+def test_single_runs_on_one_thread():
+    # Thread-affine modules (Nim refc among them) need every call on one thread.
+    session = Session("affinity")
+    seen = []
+    lock = threading.Lock()
+    try:
+        session.waitline("@logos-load-status")
+
+        def calls():
+            for _ in range(5):
+                status, value = invoke(session.client, "thread", 3000)
+                with lock:
+                    seen.append((status, value))
+
+        callers = [threading.Thread(target=calls) for _ in range(6)]
+        for caller in callers:
+            caller.start()
+        for caller in callers:
+            caller.join(timeout=15)
+        assert all(status == 0 for status, _ in seen) and len(seen) == 30, seen
+        assert len({value for _, value in seen}) == 1, sorted({value for _, value in seen})
+    finally:
+        session.close()
+
+
 test_initialization()
 test_allocator()
 for case in (("single", 0), ("multi", 1), ("multi", 2)):
     test_concurrency(*case)
-print("plain host: initialization, allocator ownership, and worker limits passed")
+test_single_runs_on_one_thread()
+print("plain host: initialization, allocator ownership, worker limits and affinity passed")
