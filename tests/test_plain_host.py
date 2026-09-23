@@ -261,6 +261,21 @@ def test_transport_set():
     assert "@logos-load-status failed unusable --transport-set" in result.stdout, result.stdout
 
 
+# Detector: the plain host had no fatal-signal handler, so a module crash left
+# nothing in the daemon log to say which module died or where.
+def test_a_crash_leaves_a_backtrace():
+    session = Session("crash")
+    try:
+        session.waitline("@logos-load-status")
+        invoke(session.client, "crash", 2000)
+        session.process.wait(timeout=5)
+        err = session.process.stderr.read()
+        assert "FATAL: module 'plain_host_fixture' crashed" in err, err
+        assert "FATAL: end backtrace" in err, err
+    finally:
+        session.close()
+
+
 test_initialization()
 test_allocator()
 for case in (("single", 0), ("multi", 1), ("multi", 2)):
@@ -268,5 +283,6 @@ for case in (("single", 0), ("multi", 1), ("multi", 2)):
 test_single_runs_on_one_thread()
 test_exits_when_its_parent_dies()
 test_transport_set()
+test_a_crash_leaves_a_backtrace()
 print("plain host: initialization, allocator ownership, worker limits, affinity,"
-      " parent death and transport sets passed")
+      " parent death, transport sets and crash backtraces passed")

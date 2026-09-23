@@ -69,6 +69,8 @@ set(LOGOS_HOST_SOURCES
     host/logos_host.cpp
     host/command_line_parser.cpp
     host/command_line_parser.h
+    host/crash_handler.cpp
+    host/crash_handler.h
     host/module_initializer.cpp
     host/module_initializer.h
     host/module_dll_search.cpp
@@ -91,6 +93,8 @@ add_executable(logos_host_plain
     host/logos_host_plain.cpp
     host/command_line_parser.cpp
     host/command_line_parser.h
+    host/crash_handler.cpp
+    host/crash_handler.h
     host/module_dll_search.cpp
     host/module_dll_search.h
     host/module_path.cpp
