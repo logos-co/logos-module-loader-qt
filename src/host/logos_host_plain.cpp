@@ -1,4 +1,5 @@
 #include "command_line_parser.h"
+#include "crash_handler.h"
 #include "module_dll_search.h"
 #include "module_path.h"
 #include "parent_lifetime.h"
@@ -278,6 +279,7 @@ int main(int argc, char** argv)
 #endif
     ModuleArgs args = parseProcessArguments(argc, argv);
     if (!args.valid) return 1;
+    installCrashHandler(args.name.c_str());
 
     const std::string token = HostTokenSource::read(args.tokenSource);
     if (token.empty()) {

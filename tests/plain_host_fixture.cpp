@@ -73,6 +73,7 @@ extern "C" {
 
 char* logos_module_dispatch(const char* method, const char*)
 {
+    if (std::strcmp(method, "crash") == 0) std::abort();
     if (std::strcmp(method, "name") == 0)
         return copyResult("\"plain_host_fixture\"");
     if (std::strcmp(method, "ready") == 0)
