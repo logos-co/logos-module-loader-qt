@@ -223,8 +223,31 @@ BOOL WINAPI consoleHandler(DWORD event)
     }
     return FALSE;
 }
+
+// The container stops a host by posting WM_QUIT to its main thread, which
+// fails unless that thread already has a message queue.
+void createMessageQueue()
+{
+    MSG msg;
+    ::PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+}
+
+void waitForStop()
+{
+    MSG msg;
+    while (!gStop.load()) {
+        ::MsgWaitForMultipleObjects(0, nullptr, FALSE, 25, QS_ALLPOSTMESSAGE);
+        while (::PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
+            if (msg.message == WM_QUIT) gStop = true;
+    }
+}
 #else
 extern "C" void stopHandler(int) { gStop = true; }
+
+void waitForStop()
+{
+    while (!gStop.load()) std::this_thread::sleep_for(std::chrono::milliseconds(25));
+}
 #endif
 
 bool verifyIdentity(Runtime& runtime, const std::string& expected, std::string& error)
@@ -245,6 +268,9 @@ bool verifyIdentity(Runtime& runtime, const std::string& expected, std::string& 
 int main(int argc, char** argv)
 {
     isolateAndFollowParent();
+#ifdef _WIN32
+    createMessageQueue();
+#endif
     ModuleArgs args = parseCommandLineArgs(argc, argv);
     if (!args.valid) return 1;
 
@@ -355,7 +381,7 @@ int main(int argc, char** argv)
 #endif
 
     reportLoadStatus(true);
-    while (!gStop.load()) std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    waitForStop();
 
     runtime.abi.setUnloadDoneCallback(&unloadDone, &runtime);
     if (runtime.abi.aboutToUnload() == 1) {

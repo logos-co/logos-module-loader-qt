@@ -30,3 +30,12 @@ add_dependencies(logos_host_dll_search_tests
 foreach(mode control configured)
     add_test(NAME windows_dll_search_${mode} COMMAND logos_host_dll_search_tests ${mode})
 endforeach()
+
+# The plain host stopped the way the subprocess container stops it here.
+add_executable(logos_host_plain_stop_tests test_plain_host_stop.cpp)
+set_target_properties(logos_host_plain_stop_tests PROPERTIES
+    AUTOMOC OFF
+    RUNTIME_OUTPUT_DIRECTORY "${test_dir}")
+add_dependencies(logos_host_plain_stop_tests logos_host_plain plain_host_fixture)
+add_test(NAME windows_plain_host_stop COMMAND logos_host_plain_stop_tests
+    $<TARGET_FILE:logos_host_plain> $<TARGET_FILE:plain_host_fixture>)
