@@ -87,6 +87,8 @@
         let
           testsPkg = self.packages.${system}.logos-module-loader-qt-tests;
           hostPkg = self.packages.${system}.logos-module-loader-qt-bin;
+          # The shared plain runtime ships only in this package, not the Qt one.
+          plainProtocolPkg = logos-protocol.packages.${system}.logos-protocol-plain;
         in
         {
           tests = pkgs.runCommand "logos-module-loader-qt-tests"
@@ -98,7 +100,7 @@
             ${pkgs.python3}/bin/python3 ${./tests/test_plain_host.py} \
               ${hostPkg}/bin/logos_host_plain \
               ${testsPkg}/lib \
-              ${logosProtocolPkg}/lib
+              ${plainProtocolPkg}/lib
             mkdir -p $out
             touch $out/.tests-passed
           '';
