@@ -5,6 +5,7 @@ add_executable(logos_module_loader_qt_tests
     test_token_source.cpp
     test_module_path.cpp
     test_transport_set_arg.cpp
+    test_host_resolution.cpp
     # These live in the logos_host_qt executable (not a linkable library), so
     # compile their implementations directly into the test binary. All three are
     # Qt-free, which is what keeps this binary free of Qt and the SDK stack.
