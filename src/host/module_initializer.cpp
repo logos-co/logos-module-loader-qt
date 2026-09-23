@@ -125,12 +125,12 @@ LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
         logos_api = new LogosAPI(moduleName, module);
     }
     logos_api->setProperty("modulePath",
-        fs::absolute(fs::path(modulePath)).parent_path().string());
+        fs::absolute(fs::u8path(modulePath)).parent_path().u8string());
 
     if (!instancePersistencePath.empty()) {
         logos_api->setProperty("instancePersistencePath", instancePersistencePath);
         logos_api->setProperty("instanceId",
-            fs::path(instancePersistencePath).filename().string());
+            fs::u8path(instancePersistencePath).filename().u8string());
     }
 
     // Surface the token as a QObject property BEFORE registerObject:

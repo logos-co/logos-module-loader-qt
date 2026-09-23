@@ -316,7 +316,7 @@ void runAboutToUnload(QObject* plugin, int graceMs)
 
 int main(int argc, char *argv[])
 {
-    ModuleArgs args = parseCommandLineArgs(argc, argv);
+    ModuleArgs args = parseProcessArguments(argc, argv);
     if (!args.valid) {
         return 1;
     }

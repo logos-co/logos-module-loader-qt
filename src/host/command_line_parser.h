@@ -51,6 +51,11 @@ struct ModuleArgs {
     bool valid;
 };
 
+// argv must be UTF-8.
 ModuleArgs parseCommandLineArgs(int argc, char *argv[]);
+
+// This process's own arguments. Windows hands main() the ANSI code page, so
+// there they are re-read from the wide command line as UTF-8.
+ModuleArgs parseProcessArguments(int argc, char *argv[]);
 
 #endif // COMMAND_LINE_PARSER_H

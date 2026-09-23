@@ -1,4 +1,5 @@
 #include "command_line_parser.h"
+#include "module_dll_search.h"
 #include "module_path.h"
 #include "parent_lifetime.h"
 #include "token_source.h"
@@ -52,7 +53,9 @@ public:
     bool open(const std::string& path, std::string& error)
     {
 #ifdef _WIN32
-        m_handle = LoadLibraryA(path.c_str());
+        // The module's own directory resolves its imports, as in the Qt host.
+        m_handle = LoadLibraryExW(std::filesystem::u8path(path).c_str(), nullptr,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
         if (!m_handle) {
             error = "LoadLibrary failed with error " + std::to_string(GetLastError());
             return false;
@@ -271,7 +274,7 @@ int main(int argc, char** argv)
 #ifdef _WIN32
     createMessageQueue();
 #endif
-    ModuleArgs args = parseCommandLineArgs(argc, argv);
+    ModuleArgs args = parseProcessArguments(argc, argv);
     if (!args.valid) return 1;
 
     const std::string token = HostTokenSource::read(args.tokenSource);
@@ -285,6 +288,11 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // Its directory stays searchable for libraries it loads later by name.
+    if (const std::string problem = ModuleDllSearch::configure(args.path); !problem.empty()) {
+        reportLoadStatus(false, problem);
+        return 1;
+    }
     DynamicLibrary library;
     std::string error;
     if (!library.open(args.path, error)) {
@@ -353,10 +361,11 @@ int main(int argc, char** argv)
     }
 
     runtime.abi.setEmitCallback(&emitEvent, &runtime);
-    const std::filesystem::path persistence(args.instancePersistencePath);
+    const auto persistence = std::filesystem::u8path(args.instancePersistencePath);
     const std::string instance = args.instancePersistencePath.empty()
-        ? std::string{} : persistence.filename().string();
-    const std::string moduleDir = std::filesystem::absolute(args.path).parent_path().string();
+        ? std::string{} : persistence.filename().u8string();
+    const std::string moduleDir =
+        std::filesystem::absolute(std::filesystem::u8path(args.path)).parent_path().u8string();
     runtime.abi.setContext(moduleDir.c_str(), instance.c_str(),
                            args.instancePersistencePath.c_str());
 

@@ -89,6 +89,8 @@ add_executable(logos_host_plain
     host/logos_host_plain.cpp
     host/command_line_parser.cpp
     host/command_line_parser.h
+    host/module_dll_search.cpp
+    host/module_dll_search.h
     host/module_path.cpp
     host/module_path.h
     host/parent_lifetime.cpp
