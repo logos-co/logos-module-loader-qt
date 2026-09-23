@@ -41,6 +41,21 @@ void freeMapped(char* value)
 #endif
 }
 
+#ifdef PLAIN_HOST_FIXTURE_DEPS
+// Built as a module that ships DLLs beside it (tests/windows): one imported,
+// one loaded later by bare name.
+extern "C" __declspec(dllimport) int leafValue();
+
+void reportDependencies()
+{
+    const HMODULE late = LoadLibraryW(L"logos_dll_search_late.dll");
+    const auto lateValue = late
+        ? reinterpret_cast<int (*)()>(GetProcAddress(late, "lateValue")) : nullptr;
+    std::printf("DEPS leaf=%d late=%d\n", leafValue(), lateValue ? lateValue() : 0);
+    std::fflush(stdout);
+}
+#endif
+
 char* copyResult(const char* value)
 {
     char* result = nullptr;
@@ -79,6 +94,9 @@ char* logos_module_get_methods() { return copyResult("[]"); }
 
 void logos_module_set_context(const char*, const char*, const char*)
 {
+#ifdef PLAIN_HOST_FIXTURE_DEPS
+    reportDependencies();
+#endif
     if (std::getenv("LOGOS_TEST_DELAY_INIT")) {
         std::puts("INIT_ENTERED");
         std::fflush(stdout);

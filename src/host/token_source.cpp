@@ -17,6 +17,7 @@
 #include <cctype>
 #include <cerrno>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
 
 namespace HostTokenSource {
@@ -127,7 +128,11 @@ std::string readFdUntilNewlineOrEof(int fd, int timeout_ms) {
 #endif  // _WIN32
 
 std::string readFromFile(const std::string& path, int timeout_ms) {
+#ifdef _WIN32
+    const int fd = ::_wopen(std::filesystem::u8path(path).c_str(), _O_RDONLY | _O_BINARY);
+#else
     const int fd = ::open(path.c_str(), O_RDONLY);
+#endif
     if (fd < 0) {
         spdlog::critical("Failed to open token file {}: {}", path, std::strerror(errno));
         return {};

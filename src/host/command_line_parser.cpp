@@ -2,6 +2,13 @@
 #include "module_path.h"
 #include <CLI/CLI.hpp>
 
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 ModuleArgs parseCommandLineArgs(int argc, char *argv[])
 {
     ModuleArgs result;
@@ -67,4 +74,27 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
 
     result.valid = true;
     return result;
+}
+
+ModuleArgs parseProcessArguments(int argc, char *argv[])
+{
+#ifdef _WIN32
+    int count = 0;
+    LPWSTR* wide = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!wide) return parseCommandLineArgs(argc, argv);
+    std::vector<std::string> arguments;
+    for (int i = 0; i < count; ++i) {
+        const int n = WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, nullptr, 0, nullptr, nullptr);
+        std::string utf8(n > 0 ? n - 1 : 0, '\0');
+        if (n > 0) WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, utf8.data(), n, nullptr, nullptr);
+        arguments.push_back(std::move(utf8));
+    }
+    LocalFree(wide);
+    std::vector<char*> pointers;
+    for (std::string& argument : arguments) pointers.push_back(argument.data());
+    pointers.push_back(nullptr);
+    return parseCommandLineArgs(count, pointers.data());
+#else
+    return parseCommandLineArgs(argc, argv);
+#endif
 }

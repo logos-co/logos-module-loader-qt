@@ -12,7 +12,8 @@ std::string resolve(const std::string& path)
     if (path.empty())
         return path;
 
-    const fs::path given(path);
+    // UTF-8 in and out: a narrow fs::path is the ANSI code page on Windows.
+    const fs::path given = fs::u8path(path);
     if (given.is_absolute())
         return path;
 
@@ -34,9 +35,9 @@ std::string resolve(const std::string& path)
     // path containing one is left exactly as composed.
     for (const fs::path& part : absolute) {
         if (part == "..")
-            return absolute.string();
+            return absolute.u8string();
     }
-    return absolute.lexically_normal().string();
+    return absolute.lexically_normal().u8string();
 }
 
 std::string fileProblem(const std::string& path)
@@ -47,7 +48,7 @@ std::string fileProblem(const std::string& path)
     std::error_code ec;
     // status(), not symlink_status(): a plugin reached through a symlink is a
     // plugin, and a dangling symlink is as good as missing.
-    const fs::file_status st = fs::status(fs::path(path), ec);
+    const fs::file_status st = fs::status(fs::u8path(path), ec);
 
     // "Not there" comes back with `ec` SET -- the OS really did answer ENOENT
     // -- so ask about it before treating a set `ec` as a failure to look. The
