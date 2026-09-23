@@ -31,12 +31,16 @@ target_include_directories(logos_module_loader_qt_tests PRIVATE
 gtest_discover_tests(logos_module_loader_qt_tests DISCOVERY_MODE PRE_TEST)
 
 # The native host regression fixture is a real module-impl C ABI library. The
-# Python check starts the packaged logos_host_plain and calls it over the
-# production plain protocol; keep it off Windows, where mmap is unavailable.
-if(UNIX)
-    add_library(plain_host_fixture SHARED plain_host_fixture.cpp)
-    target_include_directories(plain_host_fixture PRIVATE
-        ${LOGOS_PROTOCOL_ROOT}/include)
+# Python check (POSIX) and the Windows stop test run the packaged
+# logos_host_plain with it.
+add_library(plain_host_fixture SHARED plain_host_fixture.cpp)
+target_include_directories(plain_host_fixture PRIVATE
+    ${LOGOS_PROTOCOL_ROOT}/include)
+if(WIN32)
+    set_target_properties(plain_host_fixture PROPERTIES
+        PREFIX ""
+        AUTOMOC OFF
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/windows-tests")
 endif()
 
 if(WIN32)

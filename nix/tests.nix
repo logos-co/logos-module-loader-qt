@@ -25,6 +25,7 @@ pkgs.stdenv.mkDerivation {
     cp bin/logos_module_loader_qt_tests${pkgs.stdenv.hostPlatform.extensions.executable} $out/bin/
     ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isWindows ''
       cp -r windows-tests/* $out/bin/
+      cp bin/logos_host_plain.exe $out/bin/
     ''}
 
     mkdir -p $out/lib
