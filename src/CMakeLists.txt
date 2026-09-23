@@ -79,6 +79,8 @@ set(LOGOS_HOST_SOURCES
     host/parent_lifetime.h
     host/token_source.cpp
     host/token_source.h
+    host/transport_set_arg.cpp
+    host/transport_set_arg.h
     host/qt/qt_app.cpp
     host/qt/qt_app.h
 )
@@ -97,6 +99,8 @@ add_executable(logos_host_plain
     host/parent_lifetime.h
     host/token_source.cpp
     host/token_source.h
+    host/transport_set_arg.cpp
+    host/transport_set_arg.h
 )
 target_link_libraries(logos_host_plain PRIVATE
     logos_container

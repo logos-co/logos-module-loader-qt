@@ -3,10 +3,12 @@
 #include "module_path.h"
 #include "parent_lifetime.h"
 #include "token_source.h"
+#include "transport_set_arg.h"
 
 #include <logos_container/load_status.h>
 #include <logos_module_impl.h>
 #include <logos_protocol.h>
+#include <logos_transport_config_json.h>
 
 #include <nlohmann/json.hpp>
 
@@ -321,7 +323,12 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    runtime.provider = lp_provider_create(args.name.c_str(), args.transportSetJson.c_str());
+    const std::string transportSet = decodeTransportSetArg(args.transportSetJson);
+    if (std::string problem; !logos::parseTransportSet(transportSet, nullptr, &problem)) {
+        reportLoadStatus(false, "unusable --transport-set: " + problem);
+        return 1;
+    }
+    runtime.provider = lp_provider_create(args.name.c_str(), transportSet.c_str());
     if (!runtime.provider) {
         reportLoadStatus(false, "qt_remote_plain provider could not be created");
         return 1;

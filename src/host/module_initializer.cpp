@@ -1,5 +1,4 @@
 #include "module_initializer.h"
-#include <QByteArray>
 #include <QObject>
 #include <spdlog/spdlog.h>
 #include <filesystem>
@@ -17,42 +16,12 @@
 #include "module_lib.h"
 #include "module_path.h"
 #include "module_dll_search.h"
+#include "transport_set_arg.h"
 
 namespace fs = std::filesystem;
 
 using namespace ModuleLib;
 
-namespace {
-
-// `--transport-set` carries base64 so its JSON survives the command line: on
-// Windows, CommandLineToArgvW consumes `"` as a quoting delimiter, so raw JSON
-// arrives unparseable. See base64Encode() in qt_plugin_format_loader.cpp, which
-// is the only emitter.
-//
-// Both forms are accepted, and the discrimination is exact rather than
-// heuristic: a JSON transport set always begins with `{` or `[`, and neither
-// character is in the base64 alphabet. That keeps an older daemon paired with a
-// newer logos_host working.
-//
-// A payload that is neither valid base64 nor JSON is returned unchanged, so the
-// error surfaces where it is diagnosable — in transportSetFromJsonString —
-// rather than as a silently empty transport set here.
-std::string decodeTransportSetArg(const std::string& arg)
-{
-    if (!arg.empty() && (arg.front() == '{' || arg.front() == '[')) {
-        spdlog::debug("transport set supplied as raw JSON (pre-base64 emitter)");
-        return arg;
-    }
-    const QByteArray decoded = QByteArray::fromBase64(
-        QByteArray::fromStdString(arg), QByteArray::AbortOnBase64DecodingErrors);
-    if (decoded.isEmpty()) {
-        spdlog::warn("transport set is neither JSON nor valid base64; passing through unchanged");
-        return arg;
-    }
-    return decoded.toStdString();
-}
-
-} // namespace
 
 LogosModule loadModule(const std::string& modulePath, const std::string& expectedName,
                         std::string* error)
@@ -117,8 +86,14 @@ LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
     // hasn't explicitly configured.
     LogosAPI* logos_api = nullptr;
     if (!transportSetJson.empty()) {
-        LogosTransportSet set =
-            logos::transportSetFromJsonString(decodeTransportSetArg(transportSetJson));
+        // Refused, not served as local only: that hid the module's TCP listeners.
+        LogosTransportSet set;
+        std::string problem;
+        if (!logos::parseTransportSet(decodeTransportSetArg(transportSetJson), &set, &problem)) {
+            spdlog::critical("Unusable --transport-set for {}: {}", moduleName, problem);
+            delete module;
+            return nullptr;
+        }
         logos_api = new LogosAPI(QString::fromStdString(moduleName),
                                   std::move(set), module);
     } else {

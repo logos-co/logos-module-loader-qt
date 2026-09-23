@@ -4,12 +4,14 @@ add_executable(logos_module_loader_qt_tests
     test_qt_plugin_format_loader.cpp
     test_token_source.cpp
     test_module_path.cpp
+    test_transport_set_arg.cpp
     # These live in the logos_host_qt executable (not a linkable library), so
     # compile their implementations directly into the test binary. All three are
     # Qt-free, which is what keeps this binary free of Qt and the SDK stack.
     ${CMAKE_SOURCE_DIR}/src/host/token_source.cpp
     ${CMAKE_SOURCE_DIR}/src/host/module_path.cpp
     ${CMAKE_SOURCE_DIR}/src/host/command_line_parser.cpp
+    ${CMAKE_SOURCE_DIR}/src/host/transport_set_arg.cpp
 )
 
 target_link_libraries(logos_module_loader_qt_tests PRIVATE
