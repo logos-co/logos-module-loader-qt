@@ -186,9 +186,57 @@ def test_single_runs_on_one_thread():
         session.close()
 
 
+def alive(pid: int) -> bool:
+    # Exited but not yet reaped by its new parent counts as gone.
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        with open(f"/proc/{pid}/stat") as stat:
+            return stat.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except FileNotFoundError:
+        return True
+
+
+def test_exits_when_its_parent_dies():
+    # A daemon killed outright never stops its hosts; they must notice.
+    os.environ["LOGOS_INSTANCE_ID"] = f"plain_host_test_{os.getpid()}_orphan"
+    argv = [str(HOST), "--name", "plain_host_fixture", "--path", str(FIXTURE)]
+    parent = subprocess.Popen(
+        [sys.executable, "-c",
+         "import subprocess, sys, time\n"
+         "host = subprocess.Popen(sys.argv[1:], stdin=subprocess.PIPE,"
+         " stdout=subprocess.DEVNULL)\n"
+         "host.stdin.write(b'secret\\n'); host.stdin.flush()\n"
+         "print(host.pid, flush=True)\n"
+         "time.sleep(60)\n", *argv],
+        stdout=subprocess.PIPE, text=True)
+    host = int(parent.stdout.readline())
+    api.lp_token_save(b"plain_host_fixture", b"secret")
+    client = api.lp_client_create(b"plain_host_fixture", b"test", None, None)
+    try:
+        deadline = time.monotonic() + 10
+        while invoke(client, "ready", 200) != (0, "true"):
+            assert time.monotonic() < deadline, "host never came up"
+        parent.kill()
+        parent.wait()
+        deadline = time.monotonic() + 5
+        while alive(host):
+            assert time.monotonic() < deadline, "host outlived its parent"
+            time.sleep(0.05)
+    finally:
+        api.lp_client_destroy(client)
+        parent.kill()
+        if alive(host):
+            os.kill(host, signal.SIGKILL)
+
+
 test_initialization()
 test_allocator()
 for case in (("single", 0), ("multi", 1), ("multi", 2)):
     test_concurrency(*case)
 test_single_runs_on_one_thread()
-print("plain host: initialization, allocator ownership, worker limits and affinity passed")
+test_exits_when_its_parent_dies()
+print("plain host: initialization, allocator ownership, worker limits, affinity"
+      " and parent death passed")

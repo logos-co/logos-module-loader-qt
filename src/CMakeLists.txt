@@ -75,6 +75,8 @@ set(LOGOS_HOST_SOURCES
     host/module_dll_search.h
     host/module_path.cpp
     host/module_path.h
+    host/parent_lifetime.cpp
+    host/parent_lifetime.h
     host/token_source.cpp
     host/token_source.h
     host/qt/qt_app.cpp
@@ -89,6 +91,8 @@ add_executable(logos_host_plain
     host/command_line_parser.h
     host/module_path.cpp
     host/module_path.h
+    host/parent_lifetime.cpp
+    host/parent_lifetime.h
     host/token_source.cpp
     host/token_source.h
 )
