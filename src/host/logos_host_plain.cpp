@@ -158,37 +158,11 @@ std::string hostServicesJson(const std::string& csv)
 struct Runtime {
     ModuleAbi abi;
     lp_provider* provider = nullptr;
-    std::mutex dispatchMutex;
-    std::condition_variable dispatchChanged;
-    std::size_t activeDispatches = 0;
-    std::size_t maxDispatches = 1;
+    // Calls the transport runs at once; 1 is "single": arrival order, one thread.
+    unsigned maxCalls = 1;
     std::mutex unloadMutex;
     std::condition_variable unloadChanged;
     bool unloadDone = false;
-};
-
-class DispatchSlot {
-public:
-    explicit DispatchSlot(Runtime& runtime) : m_runtime(runtime)
-    {
-        std::unique_lock<std::mutex> lock(m_runtime.dispatchMutex);
-        m_runtime.dispatchChanged.wait(lock, [&] {
-            return m_runtime.activeDispatches < m_runtime.maxDispatches;
-        });
-        ++m_runtime.activeDispatches;
-    }
-
-    ~DispatchSlot()
-    {
-        {
-            std::lock_guard<std::mutex> lock(m_runtime.dispatchMutex);
-            --m_runtime.activeDispatches;
-        }
-        m_runtime.dispatchChanged.notify_one();
-    }
-
-private:
-    Runtime& m_runtime;
 };
 
 char* copyForProtocol(Runtime& runtime, char* moduleText)
@@ -202,7 +176,6 @@ char* copyForProtocol(Runtime& runtime, char* moduleText)
 char* dispatch(const char* method, const char* args, void* userData)
 {
     auto& runtime = *static_cast<Runtime*>(userData);
-    DispatchSlot slot(runtime);
     runtime.abi.setCallCaller(lp_current_caller_json());
     char* result = copyForProtocol(runtime, runtime.abi.dispatch(method, args));
     runtime.abi.setCallCaller(nullptr);
@@ -297,9 +270,8 @@ int main(int argc, char** argv)
     Runtime runtime;
     if (args.concurrency == "multi") {
         const unsigned hardware = std::thread::hardware_concurrency();
-        runtime.maxDispatches = args.maxWorkers > 0
-            ? static_cast<std::size_t>(args.maxWorkers)
-            : static_cast<std::size_t>(hardware > 0 ? hardware : 1);
+        runtime.maxCalls = args.maxWorkers > 0 ? static_cast<unsigned>(args.maxWorkers)
+                                               : (hardware > 0 ? hardware : 1);
     }
     if (!runtime.abi.resolve(library, error)) {
         reportLoadStatus(false, error);
@@ -319,6 +291,11 @@ int main(int argc, char** argv)
     runtime.provider = lp_provider_create(args.name.c_str(), args.transportSetJson.c_str());
     if (!runtime.provider) {
         reportLoadStatus(false, "qt_remote_plain provider could not be created");
+        return 1;
+    }
+    if (lp_provider_set_max_concurrent_calls(runtime.provider, runtime.maxCalls) != LP_OK) {
+        reportLoadStatus(false, "qt_remote_plain provider rejected its call concurrency");
+        lp_provider_destroy(runtime.provider);
         return 1;
     }
     if (lp_provider_save_token(runtime.provider, "core", token.c_str()) != LP_OK) {

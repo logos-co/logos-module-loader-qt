@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 #include <thread>
 #include <sys/mman.h>
 
@@ -38,6 +39,11 @@ char* logos_module_dispatch(const char* method, const char*)
         return copyResult("\"plain_host_fixture\"");
     if (std::strcmp(method, "ready") == 0)
         return copyResult(initialized ? "true" : "false");
+    if (std::strcmp(method, "thread") == 0) {
+        std::ostringstream id;
+        id << '"' << std::this_thread::get_id() << '"';
+        return copyResult(id.str().c_str());
+    }
     if (std::strcmp(method, "slow") == 0) {
         std::puts("SLOW_ENTERED");
         std::fflush(stdout);
