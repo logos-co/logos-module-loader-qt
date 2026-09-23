@@ -1,5 +1,6 @@
 #include "command_line_parser.h"
 #include "module_path.h"
+#include "parent_lifetime.h"
 #include "token_source.h"
 
 #include <logos_container/load_status.h>
@@ -243,9 +244,7 @@ bool verifyIdentity(Runtime& runtime, const std::string& expected, std::string& 
 
 int main(int argc, char** argv)
 {
-#ifndef _WIN32
-    if (::setsid() == -1) (void)::setpgid(0, 0);
-#endif
+    isolateAndFollowParent();
     ModuleArgs args = parseCommandLineArgs(argc, argv);
     if (!args.valid) return 1;
 
