@@ -125,6 +125,15 @@ std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs, bo
     if (envPath)
         logosHostPath = envPath;
 
+    // A deployment that names its Qt host ships the plain host beside it.
+    if (logosHostPath.empty() && plain) {
+        if (const char* qtHost = std::getenv("LOGOS_HOST_PATH"); qtHost && *qtHost) {
+            auto found = findInDir(fs::path(qtHost).parent_path(), true);
+            if (!found.empty())
+                logosHostPath = found.string();
+        }
+    }
+
     if (logosHostPath.empty()) {
         auto found = findInDir(fs::path(boost::dll::program_location().parent_path().string()), plain);
         if (!found.empty())

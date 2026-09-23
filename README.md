@@ -45,6 +45,17 @@ for existing binaries that do not yet carry the adjacent metadata sidecar.
 A `logos_host` → `logos_host_qt` compatibility symlink is installed so frontends
 keep working with either name.
 
+Where each host is looked for, first match wins:
+
+| | `logos_host_qt` (or `logos_host`) | `logos_host_plain` |
+|---|---|---|
+| 1 | `$LOGOS_HOST_PATH` | `$LOGOS_HOST_PLAIN_PATH` |
+| 2 | next to the running program | beside `$LOGOS_HOST_PATH` |
+| 3 | `<first modules dir>/../bin` | next to the running program |
+| 4 | | `<first modules dir>/../bin` |
+
+A bundle that runs plain modules ships `logos_host_plain` next to its Qt host.
+
 ## Windows DLL dependencies
 
 Before loading its plugin, the dedicated `logos_host_qt` process enables
