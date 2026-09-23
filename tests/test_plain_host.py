@@ -6,11 +6,14 @@ not: freeing module memory with free(), publishing before set_context finishes,
 and dropping the configured worker limit.
 """
 
+import base64
 import ctypes
+import json
 import os
 import queue
 import resource
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -57,7 +60,7 @@ def invoke(client, method: str, timeout_ms: int = 1000):
 
 class Session:
     def __init__(self, case: str, *, delay_init=False, custom_allocator=False,
-                 concurrency="single", workers=0):
+                 concurrency="single", workers=0, extra_args=()):
         instance = f"plain_host_test_{os.getpid()}_{case}"
         env = os.environ.copy()
         env["LOGOS_INSTANCE_ID"] = instance
@@ -70,6 +73,7 @@ class Session:
                 "--concurrency", concurrency]
         if workers:
             argv += ["--max-workers", str(workers)]
+        argv += list(extra_args)
         self.process = subprocess.Popen(argv, stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, env=env)
@@ -232,11 +236,37 @@ def test_exits_when_its_parent_dies():
             os.kill(host, signal.SIGKILL)
 
 
+def test_transport_set():
+    # The loader base64-encodes --transport-set; the host passed it on raw,
+    # served local only, and still reported the load ok.
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    transports = json.dumps([{"protocol": "local"},
+                             {"protocol": "tcp", "host": "127.0.0.1", "port": port}])
+    encoded = base64.b64encode(transports.encode()).decode()
+    session = Session("transport_set", extra_args=["--transport-set", encoded])
+    try:
+        assert "ok" in session.waitline("@logos-load-status")
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            pass
+    finally:
+        session.close()
+
+    result = subprocess.run(
+        [str(HOST), "--name", "plain_host_fixture", "--path", str(FIXTURE),
+         "--transport-set", base64.b64encode(b"not json").decode()],
+        input="secret\n", capture_output=True, text=True, timeout=10)
+    assert result.returncode != 0, result.stdout
+    assert "@logos-load-status failed unusable --transport-set" in result.stdout, result.stdout
+
+
 test_initialization()
 test_allocator()
 for case in (("single", 0), ("multi", 1), ("multi", 2)):
     test_concurrency(*case)
 test_single_runs_on_one_thread()
 test_exits_when_its_parent_dies()
-print("plain host: initialization, allocator ownership, worker limits, affinity"
-      " and parent death passed")
+test_transport_set()
+print("plain host: initialization, allocator ownership, worker limits, affinity,"
+      " parent death and transport sets passed")
