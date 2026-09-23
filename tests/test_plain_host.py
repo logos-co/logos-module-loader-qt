@@ -261,6 +261,20 @@ def test_transport_set():
     assert "@logos-load-status failed unusable --transport-set" in result.stdout, result.stdout
 
 
+def drain(session, timeout=5):
+    """Every line the host printed after the ones already waited for."""
+    session.process.wait(timeout=timeout)
+    seen = []
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            seen.append(session.lines.get(timeout=0.2))
+        except queue.Empty:
+            if session.process.stdout.closed or session.process.poll() is not None:
+                break
+    return seen
+
+
 # Detector: the plain host had no fatal-signal handler, so a module crash left
 # nothing in the daemon log to say which module died or where.
 def test_a_crash_leaves_a_backtrace():
@@ -276,6 +290,29 @@ def test_a_crash_leaves_a_backtrace():
         session.close()
 
 
+# Detector: a stopping host called aboutToUnload while a call was still in the
+# module, and a call queued behind it could run after.
+def test_no_call_runs_after_about_to_unload():
+    session = Session("unload")
+    try:
+        session.waitline("@logos-load-status")
+        slow = threading.Thread(target=invoke, args=(session.client, "slow", 4000))
+        slow.start()
+        session.waitline("SLOW_ENTERED")
+        queued = threading.Thread(target=invoke, args=(session.client, "ready", 4000))
+        queued.start()
+        time.sleep(0.1)
+        session.process.terminate()
+        seen = drain(session)
+        slow.join(timeout=5)
+        queued.join(timeout=5)
+        assert "CALLED_AFTER_UNLOAD" not in seen, seen
+        assert "SLOW_DONE" in seen and "ABOUT_TO_UNLOAD" in seen, seen
+        assert seen.index("SLOW_DONE") < seen.index("ABOUT_TO_UNLOAD"), seen
+    finally:
+        session.close()
+
+
 test_initialization()
 test_allocator()
 for case in (("single", 0), ("multi", 1), ("multi", 2)):
@@ -284,5 +321,6 @@ test_single_runs_on_one_thread()
 test_exits_when_its_parent_dies()
 test_transport_set()
 test_a_crash_leaves_a_backtrace()
+test_no_call_runs_after_about_to_unload()
 print("plain host: initialization, allocator ownership, worker limits, affinity,"
-      " parent death, transport sets and crash backtraces passed")
+      " parent death, transport sets, crash backtraces and unload order passed")

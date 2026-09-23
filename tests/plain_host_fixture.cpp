@@ -18,6 +18,7 @@ namespace {
 
 constexpr std::size_t kAllocationSize = 16384;
 std::atomic<bool> initialized{false};
+std::atomic<bool> unloading{false};
 
 // Memory the host must return through logos_module_string_free, never free().
 char* allocateMapped()
@@ -73,6 +74,10 @@ extern "C" {
 
 char* logos_module_dispatch(const char* method, const char*)
 {
+    if (unloading.load()) {
+        std::puts("CALLED_AFTER_UNLOAD");
+        std::fflush(stdout);
+    }
     if (std::strcmp(method, "crash") == 0) std::abort();
     if (std::strcmp(method, "name") == 0)
         return copyResult("\"plain_host_fixture\"");
@@ -87,6 +92,8 @@ char* logos_module_dispatch(const char* method, const char*)
         std::puts("SLOW_ENTERED");
         std::fflush(stdout);
         std::this_thread::sleep_for(std::chrono::milliseconds(900));
+        std::puts("SLOW_DONE");
+        std::fflush(stdout);
     }
     return copyResult("\"ok\"");
 }
@@ -113,6 +120,7 @@ int logos_module_grant_host_services(const char*) { return 0; }
 void logos_module_set_unload_done_callback(logos_module_unload_done_cb, void*) {}
 int logos_module_about_to_unload()
 {
+    unloading = true;
     std::puts("ABOUT_TO_UNLOAD");
     std::fflush(stdout);
     return 0;

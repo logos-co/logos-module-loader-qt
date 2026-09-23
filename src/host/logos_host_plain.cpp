@@ -164,12 +164,18 @@ std::string hostServicesJson(const std::string& csv)
 
 struct Runtime {
     ModuleAbi abi;
+    std::string name;
     lp_provider* provider = nullptr;
     // Calls the transport runs at once; 1 is "single": arrival order, one thread.
     unsigned maxCalls = 1;
     std::mutex unloadMutex;
     std::condition_variable unloadChanged;
     bool unloadDone = false;
+    // Calls in the module; once unloading, none enters.
+    std::mutex callsMutex;
+    std::condition_variable callsChanged;
+    int activeCalls = 0;
+    bool unloading = false;
 };
 
 char* copyForProtocol(Runtime& runtime, char* moduleText)
@@ -183,10 +189,33 @@ char* copyForProtocol(Runtime& runtime, char* moduleText)
 char* dispatch(const char* method, const char* args, void* userData)
 {
     auto& runtime = *static_cast<Runtime*>(userData);
+    {
+        std::lock_guard<std::mutex> lock(runtime.callsMutex);
+        if (runtime.unloading) {
+            const json refused{{"code", "dispatch_failed"}, {"message", "module is unloading"},
+                               {"origin", runtime.name}};
+            return lp_string_copy(refused.dump().c_str());
+        }
+        ++runtime.activeCalls;
+    }
     runtime.abi.setCallCaller(lp_current_caller_json());
     char* result = copyForProtocol(runtime, runtime.abi.dispatch(method, args));
     runtime.abi.setCallCaller(nullptr);
+    {
+        std::lock_guard<std::mutex> lock(runtime.callsMutex);
+        --runtime.activeCalls;
+    }
+    runtime.callsChanged.notify_all();
     return result;
+}
+
+// Refuses new calls and waits for those in the module, so none runs once
+// aboutToUnload has been called.
+void stopCalls(Runtime& runtime, std::chrono::steady_clock::time_point deadline)
+{
+    std::unique_lock<std::mutex> lock(runtime.callsMutex);
+    runtime.unloading = true;
+    runtime.callsChanged.wait_until(lock, deadline, [&] { return runtime.activeCalls == 0; });
 }
 
 char* getMethods(void* userData)
@@ -305,6 +334,7 @@ int main(int argc, char** argv)
     }
 
     Runtime runtime;
+    runtime.name = args.name;
     if (args.concurrency == "multi") {
         const unsigned hardware = std::thread::hardware_concurrency();
         runtime.maxCalls = args.maxWorkers > 0 ? static_cast<unsigned>(args.maxWorkers)
@@ -401,11 +431,15 @@ int main(int argc, char** argv)
     reportLoadStatus(true);
     waitForStop();
 
+    // The container kills 5s after the stop; draining calls and the module's
+    // unload share 3s of that, as in logos_host_qt, leaving the rest for teardown.
+    const auto unloadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    stopCalls(runtime, unloadDeadline);
     runtime.abi.setUnloadDoneCallback(&unloadDone, &runtime);
     if (runtime.abi.aboutToUnload() == 1) {
         std::unique_lock<std::mutex> lock(runtime.unloadMutex);
-        runtime.unloadChanged.wait_for(lock, std::chrono::seconds(3),
-                                       [&] { return runtime.unloadDone; });
+        runtime.unloadChanged.wait_until(lock, unloadDeadline,
+                                         [&] { return runtime.unloadDone; });
     }
     runtime.abi.setEmitCallback(nullptr, nullptr);
     runtime.abi.setUnloadDoneCallback(nullptr, nullptr);
