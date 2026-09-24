@@ -201,6 +201,8 @@ def alive(pid: int) -> bool:
             return stat.read().rsplit(")", 1)[1].split()[0] != "Z"
     except FileNotFoundError:
         return True
+    except ProcessLookupError:  # reaped between the open and the read
+        return False
 
 
 def test_exits_when_its_parent_dies():
