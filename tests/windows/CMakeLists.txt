@@ -30,3 +30,31 @@ add_dependencies(logos_host_dll_search_tests
 foreach(mode control configured)
     add_test(NAME windows_dll_search_${mode} COMMAND logos_host_dll_search_tests ${mode})
 endforeach()
+
+# The plain host stopped the way the subprocess container stops it here.
+add_executable(logos_host_plain_stop_tests test_plain_host_stop.cpp)
+set_target_properties(logos_host_plain_stop_tests PROPERTIES
+    AUTOMOC OFF
+    RUNTIME_OUTPUT_DIRECTORY "${test_dir}")
+add_dependencies(logos_host_plain_stop_tests logos_host_plain plain_host_fixture)
+add_test(NAME windows_plain_host_stop COMMAND logos_host_plain_stop_tests
+    $<TARGET_FILE:logos_host_plain> $<TARGET_FILE:plain_host_fixture>)
+
+# The plain fixture as a module that ships DLLs beside it.
+add_library(plain_host_fixture_deps SHARED ${PROJECT_SOURCE_DIR}/tests/plain_host_fixture.cpp)
+target_compile_definitions(plain_host_fixture_deps PRIVATE PLAIN_HOST_FIXTURE_DEPS)
+target_include_directories(plain_host_fixture_deps PRIVATE ${LOGOS_PROTOCOL_ROOT}/include)
+target_link_libraries(plain_host_fixture_deps PRIVATE logos_dll_search_leaf)
+set_target_properties(plain_host_fixture_deps PROPERTIES
+    PREFIX ""
+    AUTOMOC OFF
+    RUNTIME_OUTPUT_DIRECTORY "${test_dir}/dll-search-fixtures")
+
+add_executable(logos_host_plain_dll_tests test_plain_host_dlls.cpp)
+set_target_properties(logos_host_plain_dll_tests PROPERTIES
+    AUTOMOC OFF
+    RUNTIME_OUTPUT_DIRECTORY "${test_dir}")
+add_dependencies(logos_host_plain_dll_tests
+    logos_host_plain plain_host_fixture_deps logos_dll_search_late)
+add_test(NAME windows_plain_host_dlls COMMAND logos_host_plain_dll_tests
+    $<TARGET_FILE:logos_host_plain>)

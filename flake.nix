@@ -6,16 +6,19 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
-    logos-protocol.url = "github:logos-co/logos-protocol";
+    logos-protocol.url = "github:logos-co/logos-protocol/codex/qt-remote-plain";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/codex/qt-remote-plain-plugin";
+    logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
     logos-container.url = "github:logos-co/logos-container";
     logos-module-loader.url = "github:logos-co/logos-module-loader";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-container, logos-module-loader }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-plugin-qt, logos-qt-sdk, logos-module, logos-container, logos-module-loader }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -80,17 +83,24 @@
         }
       );
 
-      checks = forAllSystems ({ pkgs, system, ... }:
+      checks = forAllSystems ({ pkgs, system, logosProtocolPkg, ... }:
         let
           testsPkg = self.packages.${system}.logos-module-loader-qt-tests;
+          hostPkg = self.packages.${system}.logos-module-loader-qt-bin;
+          # The shared plain runtime ships only in this package, not the Qt one.
+          plainProtocolPkg = logos-protocol.packages.${system}.logos-protocol-plain;
         in
         {
           tests = pkgs.runCommand "logos-module-loader-qt-tests"
             {
-              nativeBuildInputs = [ testsPkg ];
+              nativeBuildInputs = [ testsPkg pkgs.python3 ];
             } ''
             echo "Running logos-module-loader-qt tests..."
             ${testsPkg}/bin/logos_module_loader_qt_tests
+            ${pkgs.python3}/bin/python3 ${./tests/test_plain_host.py} \
+              ${hostPkg}/bin/logos_host_plain \
+              ${testsPkg}/lib \
+              ${plainProtocolPkg}/lib
             mkdir -p $out
             touch $out/.tests-passed
           '';
