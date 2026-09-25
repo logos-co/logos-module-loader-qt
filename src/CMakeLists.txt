@@ -89,6 +89,25 @@ set(LOGOS_HOST_SOURCES
 
 add_executable(logos_host_qt ${LOGOS_HOST_SOURCES})
 
+# A native module's bring-up and teardown, for logos_host_plain and for runtime
+# hosts that load trusted modules in-process. It links no lp_* runtime: each user
+# brings its own (logos_host_plain the static one, liblogos its shared one).
+add_library(logos_native_module_host STATIC
+    host/native_module_host.cpp
+    host/native_module_host.h
+)
+target_compile_features(logos_native_module_host PUBLIC cxx_std_17)
+target_include_directories(logos_native_module_host
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/host>
+        $<INSTALL_INTERFACE:include/logos_module_loader_qt>
+    PRIVATE
+        $<TARGET_PROPERTY:logos-protocol::logos_protocol_plain,INTERFACE_INCLUDE_DIRECTORIES>
+)
+target_link_libraries(logos_native_module_host PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(logos_native_module_host PUBLIC ${CMAKE_DL_LIBS})
+set_target_properties(logos_native_module_host PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_executable(logos_host_plain
     host/logos_host_plain.cpp
     host/command_line_parser.cpp
@@ -108,6 +127,7 @@ add_executable(logos_host_plain
 )
 target_link_libraries(logos_host_plain PRIVATE
     logos_container
+    logos_native_module_host
     logos-protocol::logos_protocol_plain
     CLI11::CLI11
     spdlog::spdlog
