@@ -250,6 +250,11 @@ Module::~Module()
 
 lp_provider* Module::provider() const { return m_state ? m_state->provider : nullptr; }
 
+void* Module::symbol(const char* name) const
+{
+    return m_state && name ? m_state->library.optionalSymbol<void*>(name) : nullptr;
+}
+
 bool Module::start(const Options& options, std::string& error)
 {
     State& state = *m_state;
