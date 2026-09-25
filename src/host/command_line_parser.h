@@ -28,9 +28,8 @@ struct ModuleArgs {
     std::string tokenSource;
     // Privileged host services this module has been granted, as a BARE
     // COMMA-SEPARATED LIST drawn from the closed set logos-protocol documents
-    // ("token_registry", "token_delivery", "dynamic_calls"). Empty — the case
-    // for every ordinary module — means no grant at all, and the module stays
-    // fail-closed.
+    // ("token_delivery"). Empty — the case for every ordinary module — means no
+    // grant at all, and the module stays fail-closed.
     //
     // Not JSON, because this crosses a command line and Windows'
     // CommandLineToArgvW consumes `"` as a quoting delimiter. Service names are
