@@ -13,5 +13,6 @@ pkgs.runCommand "${common.pname}-lib-${common.version}"
 
     # Public header for the parent-side QtPluginFormatLoader.
     mkdir -p $out/include/logos_module_loader_qt
-    cp ${build.src}/src/qt_plugin_format_loader.h $out/include/logos_module_loader_qt/
+    cp ${build.src}/src/qt_plugin_format_loader.h ${build.src}/src/host/native_module_host.h \
+       $out/include/logos_module_loader_qt/
   ''

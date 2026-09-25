@@ -15,7 +15,8 @@ pkgs.stdenv.mkDerivation {
     runHook preInstall
 
     mkdir -p $out/include/logos_module_loader_qt
-    cp src/qt_plugin_format_loader.h $out/include/logos_module_loader_qt/
+    cp src/qt_plugin_format_loader.h src/host/native_module_host.h \
+       $out/include/logos_module_loader_qt/
 
     runHook postInstall
   '';
