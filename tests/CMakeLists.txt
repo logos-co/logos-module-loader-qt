@@ -6,6 +6,7 @@ add_executable(logos_module_loader_qt_tests
     test_module_path.cpp
     test_transport_set_arg.cpp
     test_host_resolution.cpp
+    test_native_module_host.cpp
     # These live in the logos_host_qt executable (not a linkable library), so
     # compile their implementations directly into the test binary. All three are
     # Qt-free, which is what keeps this binary free of Qt and the SDK stack.
@@ -17,6 +18,9 @@ add_executable(logos_module_loader_qt_tests
 
 target_link_libraries(logos_module_loader_qt_tests PRIVATE
     logos_module_loader_qt
+    # The native host runs the fixture in this process, on the static runtime.
+    logos_native_module_host
+    logos-protocol::logos_protocol_plain
     GTest::gtest
     GTest::gtest_main
     spdlog::spdlog
@@ -45,6 +49,8 @@ if(WIN32)
         AUTOMOC OFF
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/windows-tests")
 endif()
+
+add_dependencies(logos_module_loader_qt_tests plain_host_fixture)
 
 if(WIN32)
     add_subdirectory(windows)

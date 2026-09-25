@@ -4,10 +4,11 @@
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
     nixpkgs.follows = "logos-nix/nixpkgs";
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/runtime-delegate-export";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
-    logos-protocol.url = "github:logos-co/logos-protocol/codex/qt-remote-plain";
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/codex/qt-remote-plain-plugin";
+    # On protocol 0.13 (logos-protocol#97) and the branches stacked on it until they merge.
+    logos-protocol.url = "github:logos-co/logos-protocol/feat/plain-local-inproc";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/chore/relock-protocol-0.13";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";

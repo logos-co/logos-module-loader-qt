@@ -51,7 +51,8 @@ pkgs.stdenv.mkDerivation {
     cp -r lib/* $out/lib/ 2>/dev/null || true
 
     ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-      patchelf --set-rpath "$out/lib:${pkgs.boost}/lib:${pkgs.gtest}/lib:${pkgs.spdlog}/lib:${pkgs.fmt}/lib:${pkgs.stdenv.cc.cc.lib}/lib" $out/bin/logos_module_loader_qt_tests || true
+      # OpenSSL: the in-process host tests link the static plain runtime.
+      patchelf --set-rpath "$out/lib:${pkgs.boost}/lib:${pkgs.gtest}/lib:${pkgs.spdlog}/lib:${pkgs.fmt}/lib:${pkgs.lib.getLib pkgs.openssl}/lib:${pkgs.stdenv.cc.cc.lib}/lib" $out/bin/logos_module_loader_qt_tests || true
     ''}
 
     runHook postInstall
