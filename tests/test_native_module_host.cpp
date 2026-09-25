@@ -102,6 +102,8 @@ TEST(NativeModuleHost, ServesAModuleInProcessAndWithdrawsIt)
     std::string value;
     ASSERT_EQ(call("ready", &value), LP_OK);
     EXPECT_EQ(value, "true");
+    EXPECT_NE(module.symbol("logos_module_dispatch"), nullptr);
+    EXPECT_EQ(module.symbol("no_such_export"), nullptr);
     EXPECT_TRUE(module.stop(std::chrono::steady_clock::now() + std::chrono::seconds(3),
                             Teardown::InProcess));
     EXPECT_NE(call("ready", nullptr, 500), LP_OK);

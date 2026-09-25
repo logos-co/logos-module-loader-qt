@@ -56,6 +56,9 @@ public:
 
     lp_provider* provider() const;
 
+    // A symbol the module's image exports beyond the module ABI, or nullptr.
+    void* symbol(const char* name) const;
+
 private:
     struct State;
     std::unique_ptr<State> m_state;
