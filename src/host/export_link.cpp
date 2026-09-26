@@ -207,6 +207,13 @@ bool ExportLink::configure(lp_provider* provider, std::string& error)
         error = "export: the provider refused its session credential";
         return false;
     }
+    // Where the runtime's exports listen (its port range), set before the listener starts.
+    if (const auto options = issued.find("session_options");
+        options != issued.end() && options->is_object()
+        && lp_provider_set_session_options(provider, options->dump().c_str()) != LP_OK) {
+        error = "export: the provider refused its session options";
+        return false;
+    }
     s.setAnchors(issued);
     return true;
 }
