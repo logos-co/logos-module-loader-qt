@@ -29,6 +29,9 @@ struct Options {
     const lp_runtime_delegate_v1* delegate = nullptr;
     // Asked just before the module is published; false abandons the load.
     std::function<bool()> stillWanted;
+    // An exported module: this module (peering_module), called as the module,
+    // certifies and authenticates its tls_tcp listeners. Host processes only.
+    std::string peering;
 };
 
 // "multi" runs maxWorkers calls at once (the hardware's count when 0); else 1.
