@@ -192,6 +192,7 @@ struct Peering {
     std::vector<json> redeemed;
     std::string providerPin;
     int port = 0;
+    int portRange = 0; // when set, the one port an export may listen on
     lp_provider* provider = nullptr;
 
     Peering()
@@ -225,8 +226,10 @@ struct Peering {
         X509_REQ_free(request);
         std::lock_guard<std::mutex> lock(mutex);
         providerPin = pin(leaf.get());
-        return {{"chain_pem", pem(leaf.get()) + pem(serverRoot.get())},
-                {"anchors_pem", pem(clientRoot.get())}};
+        json reply = {{"chain_pem", pem(leaf.get()) + pem(serverRoot.get())},
+                      {"anchors_pem", pem(clientRoot.get())}};
+        if (portRange) reply["session_options"] = {{"port_min", portRange}, {"port_max", portRange}};
+        return reply;
     }
 
     static char* dispatch(const char* method, const char* argsJson, void* userData)
@@ -389,3 +392,38 @@ TEST(ExportLink, NoCertificateNoExport)
 }
 
 } // namespace
+
+namespace {
+
+int freePort()
+{
+    lp_provider* probe = lp_provider_create("export_link_port_probe",
+                                            R"([{"protocol":"tcp","host":"127.0.0.1","port":0}])");
+    int port = 0;
+    if (probe && lp_provider_register(probe, &Peering::dispatch, &Peering::methods, nullptr, nullptr) == LP_OK) {
+        char* text = lp_provider_endpoints_json(probe);
+        const json endpoints = json::parse(text ? text : "[]", nullptr, false);
+        lp_string_free(text);
+        if (endpoints.is_array() && !endpoints.empty()) port = endpoints[0].value("port", 0);
+    }
+    if (probe) lp_provider_destroy(probe);
+    return port;
+}
+
+} // namespace
+
+TEST(ExportLink, ListensWhereItsRuntimeExportsListen)
+{
+    useInstance("export_link_ports_");
+    Peering peering;
+    peering.portRange = freePort();
+    ASSERT_GT(peering.portRange, 0);
+    Module module;
+    std::string error;
+    ASSERT_TRUE(module.start(exportOptions(), error)) << error;
+    {
+        std::lock_guard<std::mutex> lock(peering.mutex);
+        EXPECT_EQ(peering.port, peering.portRange);
+    }
+    module.stop(std::chrono::steady_clock::now() + std::chrono::seconds(3), Teardown::InProcess);
+}
