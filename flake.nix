@@ -2,12 +2,12 @@
   description = "Qt-plugin module loader: QtPluginFormatLoader + the logos_host_qt module-host binary";
 
   inputs = {
-    logos-nix.url = "github:logos-co/logos-nix";
+    logos-nix.url = "github:logos-co/logos-nix/feat/standalone-apps";
     nixpkgs.follows = "logos-nix/nixpkgs";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/peering";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # On protocol 0.14 (tls_tcp, logos-protocol#99) and the branches stacked on it until they merge.
-    logos-protocol.url = "github:logos-co/logos-protocol/feat/peering";
+    logos-protocol.url = "github:logos-co/logos-protocol/feat/standalone-apps";
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/feat/peering";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
@@ -15,8 +15,8 @@
     logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
-    logos-container.url = "github:logos-co/logos-container";
-    logos-module-loader.url = "github:logos-co/logos-module-loader";
+    logos-container.url = "github:logos-co/logos-container/feat/standalone-apps";
+    logos-module-loader.url = "github:logos-co/logos-module-loader/feat/standalone-apps";
   };
 
   outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-plugin-qt, logos-qt-sdk, logos-module, logos-container, logos-module-loader }:
@@ -36,15 +36,23 @@
       # Same, plus "x86_64-windows". Every dependency here is a TARGET-side
       # library (headers/archives compiled into this one), so they all follow
       # ${system}; there is no build-time code generator to keep native.
+      # "aarch64-android" builds the Qt-free parts only: Android runtimes host
+      # plain modules.
       forAllTargets = f:
-        nixpkgs.lib.genAttrs (systems ++ [ "x86_64-windows" ]) (system: f {
+        nixpkgs.lib.genAttrs (systems ++ [ "x86_64-windows" "aarch64-android" ]) (system: f {
           inherit system;
           pkgs =
             if system == "x86_64-windows"
             then logos-nix.lib.mkWindowsPkgs { buildSystem = "x86_64-linux"; }
+            else if system == "aarch64-android"
+            then logos-nix.lib.mobileTargets.aarch64-android.pkgs
             else import nixpkgs { inherit system; };
+          qtHost = system != "aarch64-android";
           logosSdk = logos-cpp-sdk.packages.${system}.default;
-          logosProtocolPkg = logos-protocol.packages.${system}.default;
+          logosProtocolPkg =
+            if system == "aarch64-android"
+            then logos-protocol.packages.${system}.logos-protocol-plain
+            else logos-protocol.packages.${system}.default;
           logosQtSdk = logos-qt-sdk.packages.${system}.default;
           logosModule = logos-module.packages.${system}.default;
           logosContainer = logos-container.packages.${system}.default;
@@ -52,10 +60,10 @@
         });
     in
     {
-      packages = forAllTargets ({ pkgs, system, logosSdk, logosProtocolPkg, logosQtSdk, logosModule, logosContainer, logosModuleLoader, ... }:
+      packages = forAllTargets ({ pkgs, system, qtHost, logosSdk, logosProtocolPkg, logosQtSdk, logosModule, logosContainer, logosModuleLoader, ... }:
         let
           common = import ./nix/default.nix {
-            inherit pkgs logosSdk logosProtocolPkg logosQtSdk logosModule logosContainer logosModuleLoader;
+            inherit pkgs qtHost logosSdk logosProtocolPkg logosQtSdk logosModule logosContainer logosModuleLoader;
           };
           src = ./.;
 
@@ -63,7 +71,12 @@
 
           lib = import ./nix/lib.nix { inherit pkgs common build; };
           include = import ./nix/include.nix { inherit pkgs common src; };
-          bin = import ./nix/bin.nix { inherit pkgs common build; };
+          bin = if qtHost
+            then import ./nix/bin.nix { inherit pkgs common build; }
+            else pkgs.runCommand "${common.pname}-bin-${common.version}" { inherit (common) meta; } ''
+              mkdir -p $out/bin
+              cp ${build}/bin/logos_host_plain $out/bin/
+            '';
           tests = import ./nix/tests.nix { inherit pkgs common build; };
 
           # Combined: the parent-side loader lib + header, and the host binary.
