@@ -2,12 +2,12 @@
   description = "Qt-plugin module loader: QtPluginFormatLoader + the logos_host_qt module-host binary";
 
   inputs = {
-    logos-nix.url = "github:logos-co/logos-nix";
+    logos-nix.url = "github:logos-co/logos-nix/feat/standalone-apps";
     nixpkgs.follows = "logos-nix/nixpkgs";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/peering";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # On protocol 0.14 (tls_tcp, logos-protocol#99) and the branches stacked on it until they merge.
-    logos-protocol.url = "github:logos-co/logos-protocol/feat/peering";
+    logos-protocol.url = "github:logos-co/logos-protocol/feat/standalone-apps";
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/feat/peering";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
@@ -15,8 +15,8 @@
     logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
-    logos-container.url = "github:logos-co/logos-container";
-    logos-module-loader.url = "github:logos-co/logos-module-loader";
+    logos-container.url = "github:logos-co/logos-container/feat/standalone-apps";
+    logos-module-loader.url = "github:logos-co/logos-module-loader/feat/standalone-apps";
   };
 
   outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-plugin-qt, logos-qt-sdk, logos-module, logos-container, logos-module-loader }:
