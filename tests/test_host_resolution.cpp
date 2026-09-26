@@ -53,7 +53,7 @@ public:
                     + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())))
     {
         fs::create_directories(m_path);
-        for (const char* name : {"logos_host_qt", "logos_host_plain"})
+        for (const char* name : {"logos_host_qt", "logos_host_plain", "logos_host_remote"})
             std::ofstream(m_path / (std::string(name) + kExe)) << "";
     }
     ~HostDirectory()
@@ -93,4 +93,28 @@ TEST(HostResolution, LogosHostPlainPathStillWins)
     desc.format = "native-cdylib";
     EXPECT_EQ(fs::path(QtPluginFormatLoader().resolveHostBinary(desc)),
               configured.host("logos_host_plain"));
+}
+
+TEST(HostResolution, AFacadeUsesTheRemoteHostBesideLogosHostPath)
+{
+    HostDirectory hosts;
+    ScopedEnv qt("LOGOS_HOST_PATH", hosts.host("logos_host_qt").string());
+    ScopedEnv remote("LOGOS_HOST_REMOTE_PATH", std::nullopt);
+    LogosCore::ModuleDescriptor desc;
+    desc.format = "peer-facade";
+    desc.modulesDirs = {(fs::temp_directory_path() / "logos_no_such_modules").string()};
+    EXPECT_EQ(fs::path(QtPluginFormatLoader().resolveHostBinary(desc)),
+              hosts.host("logos_host_remote"));
+}
+
+TEST(HostResolution, LogosHostRemotePathWins)
+{
+    HostDirectory configured;
+    HostDirectory beside;
+    ScopedEnv qt("LOGOS_HOST_PATH", beside.host("logos_host_qt").string());
+    ScopedEnv remote("LOGOS_HOST_REMOTE_PATH", configured.host("logos_host_remote").string());
+    LogosCore::ModuleDescriptor desc;
+    desc.format = "peer-facade";
+    EXPECT_EQ(fs::path(QtPluginFormatLoader().resolveHostBinary(desc)),
+              configured.host("logos_host_remote"));
 }

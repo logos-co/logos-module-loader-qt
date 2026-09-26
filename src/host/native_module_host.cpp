@@ -1,5 +1,7 @@
 #include "native_module_host.h"
 
+#include "export_link.h"
+
 #include <logos_module_impl.h>
 #include <logos_protocol.h>
 #if defined(LOGOS_PROTOCOL_HAS_RUNTIME_DELEGATE)
@@ -142,6 +144,7 @@ struct Module::State {
     std::string name;
     bool inProcess = false;
     lp_provider* provider = nullptr;
+    std::unique_ptr<ExportLink> exporter;
     std::mutex unloadMutex;
     std::condition_variable unloadChanged;
     bool unloadDone = false;
@@ -222,11 +225,19 @@ struct Module::State {
         return true;
     }
 
+    // Its sessions stop before the provider goes, and their authenticator after.
+    void withdraw()
+    {
+        if (exporter) exporter->stop();
+        if (provider) lp_provider_destroy(provider);
+        provider = nullptr;
+        exporter.reset();
+    }
+
     bool fail(std::string& error, std::string message)
     {
         error = std::move(message);
-        if (provider) lp_provider_destroy(provider);
-        provider = nullptr;
+        withdraw();
         return false;
     }
 };
@@ -293,6 +304,15 @@ bool Module::start(const Options& options, std::string& error)
     if (lp_provider_save_token(state.provider, options.anchor.c_str(), options.credential.c_str())
         != LP_OK)
         return state.fail(error, "qt_remote_plain provider rejected its core credential");
+    if (!options.peering.empty()) {
+        if (state.inProcess) return state.fail(error, "an exported module runs in a host process");
+        // The host calls peering_module as the module, on its credential.
+        if (lp_token_save("core", options.credential.c_str()) != LP_OK
+            || lp_token_save("capability_module", options.credential.c_str()) != LP_OK)
+            return state.fail(error, "export: the host could not keep its credential");
+        state.exporter = std::make_unique<ExportLink>(options.name, options.peering);
+        if (!state.exporter->configure(state.provider, problem)) return state.fail(error, problem);
+    }
     const int prepareStatus = lp_provider_prepare(state.provider, &State::dispatch,
                                                   &State::getMethods, &State::acceptInboundToken,
                                                   &state);
@@ -328,6 +348,10 @@ bool Module::start(const Options& options, std::string& error)
         return state.fail(error, "qt_remote_plain business provider could not be published (status "
             + std::to_string(publishStatus) + ")");
     }
+    if (state.exporter && !state.exporter->published(problem)) {
+        state.abi.setEmitCallback(nullptr, nullptr);
+        return state.fail(error, problem);
+    }
     return true;
 }
 
@@ -359,8 +383,7 @@ bool Module::stop(std::chrono::steady_clock::time_point deadline, Teardown teard
     }
     state.abi.setEmitCallback(nullptr, nullptr);
     state.abi.setUnloadDoneCallback(nullptr, nullptr);
-    lp_provider_destroy(state.provider);
-    state.provider = nullptr;
+    state.withdraw();
     state.library.close();
     return clean;
 }

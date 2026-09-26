@@ -17,10 +17,13 @@ The compatibility loader and its two child hosts:
 | `logos_module_loader_qt` (static lib) | parent | `qt_plugin_format_loader.{h,cpp}`, `qt_plugin_format_loader_factory.cpp` | boost::dll, spdlog, the loader contract. **Qt-free / SDK-free.** Linked into `logos_core`. |
 | `logos_host_qt` (binary) | child | `host/` (`logos_host`, `command_line_parser`, `module_initializer`, `qt_app`, `token_source`) | the full SDK stack + Qt + CLI11 + logos-module. Bundled by frontends. |
 | `logos_host_plain` (binary) | child | `host/logos_host_plain.cpp` | logos-protocol plain C ABI + native dynamic loading. **Qt-free / SDK-free.** |
+| `logos_native_module_host` (static lib) | child | `host/native_module_host.{h,cpp}`, `host/export_link.{h,cpp}` | a native module's bring-up, teardown and export mode; no lp_* runtime of its own. |
+| `logos_host_process` (static lib) | child | `host/host_process`, `token_source`, `parent_lifetime`, `crash_handler`, `transport_set_arg` | the process side of a Qt-free host, for `logos_host_plain` and `logos_host_remote` (logos-peering). |
 
 The **parent** (`QtPluginFormatLoader`) selects a host from the trusted module
-format: `qt-plugin` resolves `logos_host_qt`, while `native-cdylib` resolves
-`logos_host_plain`. It resolves the selected path and builds its CLI arguments
+format: `qt-plugin` resolves `logos_host_qt`, `native-cdylib` resolves
+`logos_host_plain`, and `peer-facade` (an import of a module on another
+runtime) resolves `logos_host_remote`, which gets no `--path`. It resolves the selected path and builds its CLI arguments
 (`--name`, `--path`, `--instance-persistence-path`,
 `--transport-set`) — it is deliberately light so `logos_core` doesn't pull Qt or
 the SDK just to know *how* to launch a Qt-plugin module. The factory TU defines
@@ -38,6 +41,15 @@ checks its protocol version and declared name, gives it the host context, and
 publishes it through the Qt-compatible plain wire. Both hosts emit the same
 `@logos-load-status` verdict consumed by liblogos.
 
+A transport set with a `tls_tcp` listener marks an **exported** module. The
+host then calls `peering_module` as the module: a fresh key's CSR becomes the
+listener's certificate (`issueCertificate`), the enrolled roots its anchors,
+and every session's Hello is authenticated by `redeemTicket`. The host reports
+its bound listeners (`noteEndpoints`), follows `anchorsChanged`,
+`routesRevoked` and `routeRenewed`, reconciles every 30 s, and closes every
+session once `peering_module` has been silent for 60 s. Only a host process
+exports; an in-process module cannot.
+
 `logos_host_qt --inspect <plugin>` prints a current Qt plugin's embedded Logos
 metadata and exits. The Qt-free parent uses this only as the compatibility path
 for existing binaries that do not yet carry the adjacent metadata sidecar.
@@ -47,14 +59,15 @@ keep working with either name.
 
 Where each host is looked for, first match wins:
 
-| | `logos_host_qt` (or `logos_host`) | `logos_host_plain` |
-|---|---|---|
-| 1 | `$LOGOS_HOST_PATH` | `$LOGOS_HOST_PLAIN_PATH` |
-| 2 | next to the running program | beside `$LOGOS_HOST_PATH` |
-| 3 | `<first modules dir>/../bin` | next to the running program |
-| 4 | | `<first modules dir>/../bin` |
+| | `logos_host_qt` (or `logos_host`) | `logos_host_plain` | `logos_host_remote` |
+|---|---|---|---|
+| 1 | `$LOGOS_HOST_PATH` | `$LOGOS_HOST_PLAIN_PATH` | `$LOGOS_HOST_REMOTE_PATH` |
+| 2 | next to the running program | beside `$LOGOS_HOST_PATH` | beside `$LOGOS_HOST_PATH` |
+| 3 | `<first modules dir>/../bin` | next to the running program | next to the running program |
+| 4 | | `<first modules dir>/../bin` | `<first modules dir>/../bin` |
 
-A bundle that runs plain modules ships `logos_host_plain` next to its Qt host.
+A bundle that runs plain modules ships `logos_host_plain` next to its Qt host,
+and one that imports modules from other runtimes ships `logos_host_remote`.
 
 ## Windows DLL dependencies
 

@@ -1,7 +1,5 @@
 #include "token_source.h"
 
-#include <spdlog/spdlog.h>
-
 #include <fcntl.h>
 #include <unistd.h>
 #ifndef _WIN32
@@ -16,13 +14,22 @@
 
 #include <cctype>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <string>
 
 namespace HostTokenSource {
 
 namespace {
+
+// Plain stderr: the host process library links no logger.
+void critical(const std::string& message)
+{
+    std::fprintf(stderr, "[critical] %s\n", message.c_str());
+    std::fflush(stderr);
+}
 
 // Reduce raw bytes to the token: take everything up to the first newline (the
 // token is one line — a container may leave trailing bytes on the channel),
@@ -86,7 +93,7 @@ std::string readFdUntilNewlineOrEof(int fd, int timeout_ms) {
     if (timeout_ms < 0) {          // mirror poll()'s "negative means forever"
         sh->cv.wait(lk, ready);
     } else if (!sh->cv.wait_for(lk, std::chrono::milliseconds(timeout_ms), ready)) {
-        spdlog::critical("Timed out waiting for auth token on fd {}", fd);
+        critical("Timed out waiting for auth token on fd " + std::to_string(fd));
         return {};
     }
     return sh->out;
@@ -104,12 +111,12 @@ std::string readFdUntilNewlineOrEof(int fd, int timeout_ms) {
         struct pollfd pfd{fd, POLLIN, 0};
         const int pr = ::poll(&pfd, 1, timeout_ms);
         if (pr == 0) {
-            spdlog::critical("Timed out waiting for auth token on fd {}", fd);
+            critical("Timed out waiting for auth token on fd " + std::to_string(fd));
             return {};
         }
         if (pr < 0) {
             if (errno == EINTR) continue;
-            spdlog::critical("poll() failed reading auth token: {}", std::strerror(errno));
+            critical(std::string("poll() failed reading auth token: ") + std::strerror(errno));
             return {};
         }
         const ssize_t n = ::read(fd, buf, sizeof(buf));
@@ -120,7 +127,7 @@ std::string readFdUntilNewlineOrEof(int fd, int timeout_ms) {
         }
         if (n == 0) return out;                  // EOF: token is everything read
         if (errno == EINTR) continue;
-        spdlog::critical("read() failed reading auth token: {}", std::strerror(errno));
+        critical(std::string("read() failed reading auth token: ") + std::strerror(errno));
         return {};
     }
 }
@@ -134,7 +141,7 @@ std::string readFromFile(const std::string& path, int timeout_ms) {
     const int fd = ::open(path.c_str(), O_RDONLY);
 #endif
     if (fd < 0) {
-        spdlog::critical("Failed to open token file {}: {}", path, std::strerror(errno));
+        critical("Failed to open token file " + path + ": " + std::strerror(errno));
         return {};
     }
     std::string out = readFdUntilNewlineOrEof(fd, timeout_ms);
@@ -154,22 +161,22 @@ std::string read(const std::string& source, int timeout_ms) {
         char* end = nullptr;
         const long fd = std::strtol(n.c_str(), &end, 10);
         if (n.empty() || end == n.c_str() || *end != '\0' || fd < 0) {
-            spdlog::critical("Invalid --token-source fd spec: {}", source);
+            critical("Invalid --token-source fd spec: " + source);
             return {};
         }
         token = readFdUntilNewlineOrEof(static_cast<int>(fd), timeout_ms);
     } else if (source.rfind("file:", 0) == 0) {
         token = readFromFile(source.substr(5), timeout_ms);
     } else {
-        spdlog::critical("Unknown --token-source: {} "
-                         "(expected stdin, fd:<n>, or file:<path>)", source);
+        critical("Unknown --token-source: " + source
+                 + " (expected stdin, fd:<n>, or file:<path>)");
         return {};
     }
 
     firstLine(token);
     if (token.empty())
-        spdlog::critical("No auth token received from source: {}",
-                         source.empty() ? "stdin" : source.c_str());
+        critical("No auth token received from source: "
+                 + (source.empty() ? std::string("stdin") : source));
     return token;
 }
 

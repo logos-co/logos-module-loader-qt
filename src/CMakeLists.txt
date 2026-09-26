@@ -93,6 +93,8 @@ add_executable(logos_host_qt ${LOGOS_HOST_SOURCES})
 # hosts that load trusted modules in-process. It links no lp_* runtime: each user
 # brings its own (logos_host_plain the static one, liblogos its shared one).
 add_library(logos_native_module_host STATIC
+    host/export_link.cpp
+    host/export_link.h
     host/native_module_host.cpp
     host/native_module_host.h
 )
@@ -105,19 +107,19 @@ target_include_directories(logos_native_module_host
         $<TARGET_PROPERTY:logos-protocol::logos_protocol_plain,INTERFACE_INCLUDE_DIRECTORIES>
 )
 target_link_libraries(logos_native_module_host PRIVATE nlohmann_json::nlohmann_json)
-target_link_libraries(logos_native_module_host PUBLIC ${CMAKE_DL_LIBS})
+# Export mode makes each exported module's key and CSR.
+find_package(OpenSSL 3.0 REQUIRED)
+target_link_libraries(logos_native_module_host PUBLIC ${CMAKE_DL_LIBS} OpenSSL::Crypto)
 set_target_properties(logos_native_module_host PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_executable(logos_host_plain
-    host/logos_host_plain.cpp
-    host/command_line_parser.cpp
-    host/command_line_parser.h
+# The process side of a Qt-free module host: following the parent, the auth
+# token, the load-status line and the stop. For logos_host_plain and for hosts
+# built elsewhere (logos-peering's logos_host_remote).
+add_library(logos_host_process STATIC
     host/crash_handler.cpp
     host/crash_handler.h
-    host/module_dll_search.cpp
-    host/module_dll_search.h
-    host/module_path.cpp
-    host/module_path.h
+    host/host_process.cpp
+    host/host_process.h
     host/parent_lifetime.cpp
     host/parent_lifetime.h
     host/token_source.cpp
@@ -125,8 +127,27 @@ add_executable(logos_host_plain
     host/transport_set_arg.cpp
     host/transport_set_arg.h
 )
+target_compile_features(logos_host_process PUBLIC cxx_std_17)
+target_include_directories(logos_host_process
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/host>
+        $<INSTALL_INTERFACE:include/logos_module_loader_qt>
+)
+target_link_libraries(logos_host_process PRIVATE logos_container)
+set_target_properties(logos_host_process PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_executable(logos_host_plain
+    host/logos_host_plain.cpp
+    host/command_line_parser.cpp
+    host/command_line_parser.h
+    host/module_dll_search.cpp
+    host/module_dll_search.h
+    host/module_path.cpp
+    host/module_path.h
+)
 target_link_libraries(logos_host_plain PRIVATE
     logos_container
+    logos_host_process
     logos_native_module_host
     logos-protocol::logos_protocol_plain
     CLI11::CLI11

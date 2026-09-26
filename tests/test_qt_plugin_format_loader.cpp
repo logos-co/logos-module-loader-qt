@@ -47,6 +47,12 @@ TEST_F(QtPluginFormatLoaderTest, CanHandle_AcceptsEmptyFormat) {
     EXPECT_TRUE(loader.canHandle(desc));
 }
 
+TEST_F(QtPluginFormatLoaderTest, CanHandle_AcceptsPeerFacadeFormat) {
+    LogosCore::ModuleDescriptor desc;
+    desc.format = "peer-facade";
+    EXPECT_TRUE(loader.canHandle(desc));
+}
+
 TEST_F(QtPluginFormatLoaderTest, CanHandle_RejectsWasmFormat) {
     LogosCore::ModuleDescriptor desc;
     desc.format = "wasm";
@@ -223,6 +229,21 @@ TEST_F(QtPluginFormatLoaderTest, BuildArguments_ForwardsNativeMultiDispatchPolic
 
     ASSERT_EQ(valueOf(args, "--concurrency"), std::optional<std::string>("multi"));
     ASSERT_EQ(valueOf(args, "--max-workers"), std::optional<std::string>("3"));
+}
+
+// A facade has no image to point at, and waits upstream rather than here.
+TEST_F(QtPluginFormatLoaderTest, BuildArguments_AFacadeHasNoPathAndTakesManyCalls) {
+    LogosCore::ModuleDescriptor desc;
+    desc.name = "monerod_module";
+    desc.format = "peer-facade";
+    desc.transportSetJson = R"([{"protocol":"qt_remote_plain"}])";
+
+    const auto args = loader.buildArguments(desc);
+
+    EXPECT_EQ(valueOf(args, "--name"), std::optional<std::string>("monerod_module"));
+    EXPECT_FALSE(valueOf(args, "--path").has_value());
+    EXPECT_EQ(valueOf(args, "--concurrency"), std::optional<std::string>("multi"));
+    EXPECT_TRUE(valueOf(args, "--transport-set").has_value());
 }
 
 TEST_F(QtPluginFormatLoaderTest, BuildArguments_KeepsSingleDispatchAsHostDefault) {

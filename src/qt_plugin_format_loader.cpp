@@ -106,9 +106,25 @@ std::string base64Encode(const std::string& in)
     return out;
 }
 
-fs::path findInDir(const fs::path& dir, bool plain) {
-    const std::vector<std::string> names = plain
+enum class HostKind { Qt, Plain, Remote };
+
+// A peer-facade record is served by logos_host_remote (logos-peering), which
+// forwards its calls to the module it imports from another runtime.
+HostKind hostKindFor(const std::string& format) {
+    if (format == "native-cdylib") return HostKind::Plain;
+    if (format == "peer-facade") return HostKind::Remote;
+    return HostKind::Qt;
+}
+
+const char* hostEnvVar(HostKind kind) {
+    return kind == HostKind::Plain ? "LOGOS_HOST_PLAIN_PATH"
+         : kind == HostKind::Remote ? "LOGOS_HOST_REMOTE_PATH" : "LOGOS_HOST_PATH";
+}
+
+fs::path findInDir(const fs::path& dir, HostKind kind) {
+    const std::vector<std::string> names = kind == HostKind::Plain
         ? std::vector<std::string>{"logos_host_plain"}
+        : kind == HostKind::Remote ? std::vector<std::string>{"logos_host_remote"}
         : std::vector<std::string>{"logos_host_qt", "logos_host"};
     for (const auto& name : names) {
         auto candidate = (dir / (std::string(name) + kExeSuffix)).lexically_normal();
@@ -118,24 +134,24 @@ fs::path findInDir(const fs::path& dir, bool plain) {
     return {};
 }
 
-std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs, bool plain) {
+std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs, HostKind kind) {
     std::string logosHostPath;
 
-    const char* envPath = std::getenv(plain ? "LOGOS_HOST_PLAIN_PATH" : "LOGOS_HOST_PATH");
+    const char* envPath = std::getenv(hostEnvVar(kind));
     if (envPath)
         logosHostPath = envPath;
 
-    // A deployment that names its Qt host ships the plain host beside it.
-    if (logosHostPath.empty() && plain) {
+    // A deployment that names its Qt host ships the other hosts beside it.
+    if (logosHostPath.empty() && kind != HostKind::Qt) {
         if (const char* qtHost = std::getenv("LOGOS_HOST_PATH"); qtHost && *qtHost) {
-            auto found = findInDir(fs::path(qtHost).parent_path(), true);
+            auto found = findInDir(fs::path(qtHost).parent_path(), kind);
             if (!found.empty())
                 logosHostPath = found.string();
         }
     }
 
     if (logosHostPath.empty()) {
-        auto found = findInDir(fs::path(boost::dll::program_location().parent_path().string()), plain);
+        auto found = findInDir(fs::path(boost::dll::program_location().parent_path().string()), kind);
         if (!found.empty())
             logosHostPath = found.string();
     }
@@ -145,7 +161,7 @@ std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs, bo
             auto binDir = fs::absolute(
                 fs::path(modulesDirs.front()) / ".." / "bin"
             ).lexically_normal();
-            auto found = findInDir(binDir, plain);
+            auto found = findInDir(binDir, kind);
             if (!found.empty())
                 logosHostPath = found.string();
         }
@@ -153,8 +169,9 @@ std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs, bo
 
     if (logosHostPath.empty() || !fs::exists(logosHostPath)) {
         spdlog::critical("{} not found - set {} or place it next to the executable (last tried: {})",
-                         plain ? "logos_host_plain" : "logos_host_qt (or logos_host)",
-                         plain ? "LOGOS_HOST_PLAIN_PATH" : "LOGOS_HOST_PATH", logosHostPath);
+                         kind == HostKind::Plain ? "logos_host_plain"
+                         : kind == HostKind::Remote ? "logos_host_remote" : "logos_host_qt (or logos_host)",
+                         hostEnvVar(kind), logosHostPath);
         return {};
     }
 
@@ -166,20 +183,22 @@ std::string resolveLogosHostPath(const std::vector<std::string>& modulesDirs, bo
 bool QtPluginFormatLoader::canHandle(const LogosCore::ModuleDescriptor& desc) const
 {
     return desc.format == "qt-plugin" || desc.format == "native-cdylib"
-        || desc.format.empty();
+        || desc.format == "peer-facade" || desc.format.empty();
 }
 
 std::string QtPluginFormatLoader::resolveHostBinary(const LogosCore::ModuleDescriptor& desc) const
 {
-    return resolveLogosHostPath(desc.modulesDirs, desc.format == "native-cdylib");
+    return resolveLogosHostPath(desc.modulesDirs, hostKindFor(desc.format));
 }
 
 std::vector<std::string> QtPluginFormatLoader::buildArguments(const LogosCore::ModuleDescriptor& desc) const
 {
-    std::vector<std::string> args = {
-        "--name", desc.name,
-        "--path", desc.path
-    };
+    // A facade has no image: it learns what it imports from peering_module.
+    std::vector<std::string> args = {"--name", desc.name};
+    if (desc.format != "peer-facade") {
+        args.push_back("--path");
+        args.push_back(desc.path);
+    }
 
     if (!desc.instancePersistencePath.empty()) {
         args.push_back("--instance-persistence-path");
@@ -205,7 +224,11 @@ std::vector<std::string> QtPluginFormatLoader::buildArguments(const LogosCore::M
         args.push_back(services);
     }
 
-    if (desc.format == "native-cdylib" && desc.rawMetadata.is_object()) {
+    if (desc.format == "peer-facade") {
+        // Calls wait upstream, where the imported module keeps its own gate.
+        args.push_back("--concurrency");
+        args.push_back("multi");
+    } else if (desc.format == "native-cdylib" && desc.rawMetadata.is_object()) {
         const auto concurrencyIt = desc.rawMetadata.find("concurrency");
         const std::string concurrency = concurrencyIt != desc.rawMetadata.end()
                 && concurrencyIt->is_string()
