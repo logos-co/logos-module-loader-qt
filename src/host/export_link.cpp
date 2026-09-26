@@ -69,6 +69,7 @@ struct ExportLink::State {
     std::string peering;
     std::chrono::milliseconds reconcile;
     lp_client* client = nullptr;
+    bool ownsClient = true;
     lp_provider* provider = nullptr;
     std::vector<lp_subscription*> subscriptions;
 
@@ -173,17 +174,24 @@ ExportLink::ExportLink(std::string module, std::string peering, std::chrono::mil
     m_state->reconcile = reconcile;
 }
 
+ExportLink::ExportLink(std::string module, lp_client* peering, std::chrono::milliseconds reconcile)
+    : ExportLink(std::move(module), std::string(), reconcile)
+{
+    m_state->client = peering;
+    m_state->ownsClient = false;
+}
+
 ExportLink::~ExportLink()
 {
     stop();
-    if (m_state->client) lp_client_destroy(m_state->client);
+    if (m_state->client && m_state->ownsClient) lp_client_destroy(m_state->client);
 }
 
 bool ExportLink::configure(lp_provider* provider, std::string& error)
 {
     State& s = *m_state;
     s.provider = provider;
-    s.client = lp_client_create(s.peering.c_str(), s.module.c_str(), nullptr, nullptr);
+    if (!s.client) s.client = lp_client_create(s.peering.c_str(), s.module.c_str(), nullptr, nullptr);
     if (!s.client) {
         error = "export: no client for " + s.peering;
         return false;

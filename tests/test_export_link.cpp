@@ -1,6 +1,7 @@
 // An exported module's tls_tcp listener, certified and authenticated by a
 // stand-in peering_module served from this test: the host calls it as the
 // module, and a revocation it announces closes the sessions it covers.
+#include "export_link.h"
 #include "native_module_host.h"
 
 #include <logos_protocol.h>
@@ -278,6 +279,7 @@ struct Peering {
 struct Dialer {
     Peering* peering = nullptr;
     std::string ticket = "good";
+    std::string module = "plain_host_fixture";
 
     static char* dial(const char*, void* userData)
     {
@@ -291,7 +293,7 @@ struct Dialer {
     static char* hello(const char*, void* userData)
     {
         auto& d = *static_cast<Dialer*>(userData);
-        return heap(json{{"ticket", d.ticket}, {"module", "plain_host_fixture"}}.dump());
+        return heap(json{{"ticket", d.ticket}, {"module", d.module}}.dump());
     }
 };
 
@@ -426,4 +428,56 @@ TEST(ExportLink, ListensWhereItsRuntimeExportsListen)
         EXPECT_EQ(peering.port, peering.portRange);
     }
     module.stop(std::chrono::steady_clock::now() + std::chrono::seconds(3), Teardown::InProcess);
+}
+
+// core_service's operator listener: the runtime's provider is registered long
+// before peering starts, so the link borrows the runtime's own client and the
+// listener is added afterwards.
+namespace {
+
+char* coreDispatch(const char* method, const char*, void*)
+{
+    return heap(std::strcmp(method, "caller") == 0 ? lp_current_caller_json() : "null");
+}
+
+char* coreMethods(void*) { return heap("[]"); }
+
+} // namespace
+
+TEST(ExportLink, TheRuntimesOwnEndpointBorrowsItsClient)
+{
+    useInstance("export_link_core_");
+    Peering peering;
+    lp_provider* core = lp_provider_create("core_service", "[]");
+    ASSERT_EQ(lp_provider_register(core, &coreDispatch, &coreMethods, nullptr, nullptr), LP_OK);
+    lp_client* runtime = lp_client_create("peering_module", "logos_runtime", nullptr, nullptr);
+    ASSERT_NE(runtime, nullptr);
+    std::string error;
+    {
+        logos::native_host::ExportLink link("core_service", runtime);
+        ASSERT_TRUE(link.configure(core, error)) << error;
+        ASSERT_EQ(lp_provider_add_endpoint(core, R"({"protocol":"tls_tcp","host":"127.0.0.1","port":0})"),
+                  LP_OK);
+        ASSERT_TRUE(link.published(error)) << error;
+        {
+            std::lock_guard<std::mutex> lock(peering.mutex);
+            ASSERT_GT(peering.port, 0);
+        }
+        Dialer dialer;
+        dialer.peering = &peering;
+        dialer.module = "core_service";
+        lp_client* client = lp_client_create("core_service", "wallet", R"({"protocol":"tls_tcp"})", nullptr);
+        lp_client_set_tls_credential(client, peering.clientChain().c_str(), pem(peering.clientKey.get()).c_str());
+        lp_client_set_session_hook(client, &Dialer::dial, &Dialer::hello, &dialer);
+        json who;
+        EXPECT_EQ(invoke(client, "caller", &who), LP_OK);
+        EXPECT_EQ(who, json({{"kind", "remote"}, {"peer", "peer-1"}, {"name", "wallet"}}));
+        lp_client_destroy(client);
+        link.stop();
+        lp_provider_destroy(core);
+    }
+    // Borrowed: still the caller's after the link is gone.
+    json answer;
+    EXPECT_EQ(invoke(runtime, "sessionAnchors", &answer), LP_OK);
+    lp_client_destroy(runtime);
 }
