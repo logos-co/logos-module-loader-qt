@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
+#include <string>
 #include <thread>
 #ifdef _WIN32
 #include <windows.h>
@@ -19,6 +20,8 @@ namespace {
 constexpr std::size_t kAllocationSize = 16384;
 std::atomic<bool> initialized{false};
 std::atomic<bool> unloading{false};
+// What the host said about the caller of the dispatch on this thread.
+thread_local std::string currentCaller;
 
 // Memory the host must return through logos_module_string_free, never free().
 char* allocateMapped()
@@ -83,6 +86,8 @@ char* logos_module_dispatch(const char* method, const char*)
         return copyResult("\"plain_host_fixture\"");
     if (std::strcmp(method, "ready") == 0)
         return copyResult(initialized ? "true" : "false");
+    if (std::strcmp(method, "caller") == 0)
+        return copyResult(currentCaller.empty() ? "null" : currentCaller.c_str());
     if (std::strcmp(method, "thread") == 0) {
         std::ostringstream id;
         id << '"' << std::this_thread::get_id() << '"';
@@ -125,7 +130,7 @@ int logos_module_about_to_unload()
     std::fflush(stdout);
     return 0;
 }
-void logos_module_set_call_caller(const char*) {}
+void logos_module_set_call_caller(const char* caller) { currentCaller = caller ? caller : ""; }
 const char* logos_module_get_protocol_version() { return LOGOS_PROTOCOL_VERSION_STRING; }
 
 void logos_module_string_free(char* value)

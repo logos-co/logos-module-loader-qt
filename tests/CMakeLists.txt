@@ -7,22 +7,23 @@ add_executable(logos_module_loader_qt_tests
     test_transport_set_arg.cpp
     test_host_resolution.cpp
     test_native_module_host.cpp
-    # These live in the logos_host_qt executable (not a linkable library), so
-    # compile their implementations directly into the test binary. All three are
-    # Qt-free, which is what keeps this binary free of Qt and the SDK stack.
-    ${CMAKE_SOURCE_DIR}/src/host/token_source.cpp
+    test_export_link.cpp
+    # These live in the host executables (not a linkable library), so compile
+    # their implementations directly into the test binary. Both are Qt-free,
+    # which is what keeps this binary free of Qt and the SDK stack.
     ${CMAKE_SOURCE_DIR}/src/host/module_path.cpp
     ${CMAKE_SOURCE_DIR}/src/host/command_line_parser.cpp
-    ${CMAKE_SOURCE_DIR}/src/host/transport_set_arg.cpp
 )
 
 target_link_libraries(logos_module_loader_qt_tests PRIVATE
     logos_module_loader_qt
     # The native host runs the fixture in this process, on the static runtime.
     logos_native_module_host
+    logos_host_process
     logos-protocol::logos_protocol_plain
     GTest::gtest
     GTest::gtest_main
+    nlohmann_json::nlohmann_json
     spdlog::spdlog
     # command_line_parser.cpp's only dependency (header-only).
     CLI11::CLI11
