@@ -87,7 +87,9 @@ set(LOGOS_HOST_SOURCES
     host/qt/qt_app.h
 )
 
+if(LOGOS_BUILD_QT_HOST)
 add_executable(logos_host_qt ${LOGOS_HOST_SOURCES})
+endif()
 
 # A native module's bring-up and teardown, for logos_host_plain and for runtime
 # hosts that load trusted modules in-process. It links no lp_* runtime: each user
@@ -162,6 +164,7 @@ set_target_properties(logos_host_plain PROPERTIES
     INSTALL_RPATH "$ORIGIN/../lib"
     BUILD_WITH_INSTALL_RPATH TRUE)
 
+if(LOGOS_BUILD_QT_HOST)
 # The host reads its auth token from an OS handle (HostTokenSource, default stdin)
 # named by --token-source and writes its load status to stdout, so it depends on
 # no container IMPLEMENTATION. logos_container is header-only and names none: it
@@ -217,4 +220,5 @@ else()
     set_target_properties(logos_host_qt PROPERTIES
         INSTALL_RPATH "$ORIGIN/../lib"
         BUILD_WITH_INSTALL_RPATH TRUE)
+endif()
 endif()

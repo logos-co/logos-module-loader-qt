@@ -3,11 +3,19 @@ project(LogosModuleLoaderQt LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# OFF builds only the Qt-free parts: the parent-side loader, logos_host_plain
+# and the host libraries (what an Android runtime ships).
+option(LOGOS_BUILD_QT_HOST "Build logos_host_qt (needs Qt, logos-qt-sdk, logos-module)" ON)
+option(LOGOS_MODULE_LOADER_QT_BUILD_TESTS "Build the tests" ON)
+
+if(LOGOS_BUILD_QT_HOST)
 set(CMAKE_AUTOMOC ON)
 
 # Qt for the host binary (Core/Network/RemoteObjects).
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Network RemoteObjects)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Network RemoteObjects)
+endif()
 
 find_package(nlohmann_json REQUIRED)
 # OpenSSL needed transitively by logos_sdk (plain-C++ TCP+SSL transport)
@@ -35,23 +43,25 @@ endif()
 get_filename_component(LOGOS_CPP_SDK_ROOT "${LOGOS_CPP_SDK_ROOT}" ABSOLUTE)
 
 if(EXISTS "${LOGOS_PROTOCOL_ROOT}/lib/cmake/logos-protocol"
-   AND EXISTS "${LOGOS_QT_SDK_ROOT}/lib/cmake/logos-qt-sdk")
+   AND (NOT LOGOS_BUILD_QT_HOST OR EXISTS "${LOGOS_QT_SDK_ROOT}/lib/cmake/logos-qt-sdk"))
   message(STATUS "Using logos-protocol at ${LOGOS_PROTOCOL_ROOT}")
-  message(STATUS "Using logos-qt-sdk at ${LOGOS_QT_SDK_ROOT}")
   find_package(logos-protocol REQUIRED
     PATHS "${LOGOS_PROTOCOL_ROOT}/lib/cmake/logos-protocol" NO_DEFAULT_PATH)
-  find_package(logos-qt-sdk REQUIRED
-    PATHS "${LOGOS_QT_SDK_ROOT}/lib/cmake/logos-qt-sdk" NO_DEFAULT_PATH)
-  if(NOT TARGET logos_sdk)
-    add_library(logos_sdk INTERFACE IMPORTED)
-    target_link_libraries(logos_sdk INTERFACE logos-qt-sdk::logos_qt_sdk)
+  if(LOGOS_BUILD_QT_HOST)
+    message(STATUS "Using logos-qt-sdk at ${LOGOS_QT_SDK_ROOT}")
+    find_package(logos-qt-sdk REQUIRED
+      PATHS "${LOGOS_QT_SDK_ROOT}/lib/cmake/logos-qt-sdk" NO_DEFAULT_PATH)
+    if(NOT TARGET logos_sdk)
+      add_library(logos_sdk INTERFACE IMPORTED)
+      target_link_libraries(logos_sdk INTERFACE logos-qt-sdk::logos_qt_sdk)
+    endif()
   endif()
 else()
   message(FATAL_ERROR "logos-protocol / logos-qt-sdk not found. Set "
                       "LOGOS_PROTOCOL_ROOT and LOGOS_QT_SDK_ROOT to built packages.")
 endif()
 
-if(EXISTS "${LOGOS_CPP_SDK_ROOT}/lib/cmake/logos-cpp-sdk")
+if(LOGOS_BUILD_QT_HOST AND EXISTS "${LOGOS_CPP_SDK_ROOT}/lib/cmake/logos-cpp-sdk")
   find_package(logos-cpp-sdk REQUIRED
     PATHS "${LOGOS_CPP_SDK_ROOT}/lib/cmake/logos-cpp-sdk" NO_DEFAULT_PATH)
   if(NOT TARGET logos_headers)
@@ -64,7 +74,9 @@ endif()
 # ---------------------------------------------------------------------------
 # logos-module library (used by the host to load plugins)
 # ---------------------------------------------------------------------------
-if(DEFINED LOGOS_MODULE_ROOT AND EXISTS "${LOGOS_MODULE_ROOT}/lib")
+if(NOT LOGOS_BUILD_QT_HOST)
+  # Only logos_host_qt loads Qt plugins.
+elseif(DEFINED LOGOS_MODULE_ROOT AND EXISTS "${LOGOS_MODULE_ROOT}/lib")
   message(STATUS "Using logos-module at ${LOGOS_MODULE_ROOT}")
   find_library(LOGOS_MODULE_LIBRARY
     NAMES logos_module
@@ -90,6 +102,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 add_subdirectory(src)
 
+if(LOGOS_MODULE_LOADER_QT_BUILD_TESTS)
 # GoogleTest setup
 find_package(GTest QUIET)
 if(NOT GTest_FOUND)
@@ -107,6 +120,7 @@ enable_testing()
 include(GoogleTest)
 
 add_subdirectory(tests)
+endif()
 
 # Install rules: the parent-side loader lib + its header, and the host binary.
 install(TARGETS logos_module_loader_qt
@@ -125,7 +139,11 @@ install(TARGETS logos_native_module_host logos_host_process ARCHIVE DESTINATION 
 install(FILES cmake/LogosFormatLoaderImplConfig.cmake
     DESTINATION lib/cmake/LogosFormatLoaderImpl
 )
-install(TARGETS logos_host_qt logos_host_plain
+install(TARGETS logos_host_plain
+    RUNTIME DESTINATION bin
+)
+if(LOGOS_BUILD_QT_HOST)
+install(TARGETS logos_host_qt
     RUNTIME DESTINATION bin
 )
 
@@ -141,3 +159,4 @@ install(CODE "
     logos_host_qt${CMAKE_EXECUTABLE_SUFFIX}
     \${CMAKE_INSTALL_PREFIX}/bin/logos_host${CMAKE_EXECUTABLE_SUFFIX})
 ")
+endif()
