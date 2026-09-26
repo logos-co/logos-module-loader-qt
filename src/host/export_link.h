@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+struct lp_client;
 struct lp_provider;
 
 namespace logos::native_host {
@@ -17,12 +18,17 @@ class ExportLink {
 public:
     ExportLink(std::string module, std::string peering,
                std::chrono::milliseconds reconcile = std::chrono::seconds(30));
+    // The runtime's own endpoint for `module` (core_service's operator
+    // listener): calls go on `peering`, which stays the caller's and must
+    // outlive this object.
+    ExportLink(std::string module, lp_client* peering,
+               std::chrono::milliseconds reconcile = std::chrono::seconds(30));
     ~ExportLink();
     ExportLink(const ExportLink&) = delete;
     ExportLink& operator=(const ExportLink&) = delete;
 
-    // Before the provider is prepared: a fresh key certified as `provider`,
-    // the enrolled roots as anchors, and the session authenticator.
+    // Before the provider's tls_tcp listener starts: a fresh key certified as
+    // `provider`, the enrolled roots as anchors, and the session authenticator.
     bool configure(lp_provider* provider, std::string& error);
     // After it is published: report the listeners, follow revocations.
     bool published(std::string& error);

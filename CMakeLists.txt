@@ -115,7 +115,7 @@ install(TARGETS logos_module_loader_qt
 )
 install(FILES src/qt_plugin_format_loader.h src/host/native_module_host.h
     src/host/host_process.h src/host/token_source.h src/host/crash_handler.h
-    src/host/transport_set_arg.h
+    src/host/transport_set_arg.h src/host/export_link.h
     DESTINATION include/logos_module_loader_qt
 )
 install(TARGETS logos_native_module_host logos_host_process ARCHIVE DESTINATION lib)

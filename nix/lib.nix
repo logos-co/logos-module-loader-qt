@@ -16,5 +16,6 @@ pkgs.runCommand "${common.pname}-lib-${common.version}"
     cp ${build.src}/src/qt_plugin_format_loader.h ${build.src}/src/host/native_module_host.h \
        ${build.src}/src/host/host_process.h ${build.src}/src/host/token_source.h \
        ${build.src}/src/host/crash_handler.h ${build.src}/src/host/transport_set_arg.h \
+       ${build.src}/src/host/export_link.h \
        $out/include/logos_module_loader_qt/
   ''
