@@ -8,6 +8,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # and the host libraries (what an Android runtime ships).
 option(LOGOS_BUILD_QT_HOST "Build logos_host_qt (needs Qt, logos-qt-sdk, logos-module)" ON)
 option(LOGOS_MODULE_LOADER_QT_BUILD_TESTS "Build the tests" ON)
+# OFF where no process may be started (iOS): the loader and the in-process host only.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set(_logos_plain_host_default OFF)
+else()
+  set(_logos_plain_host_default ON)
+endif()
+option(LOGOS_BUILD_PLAIN_HOST "Build logos_host_plain and its host-process library"
+       ${_logos_plain_host_default})
 
 if(LOGOS_BUILD_QT_HOST)
 set(CMAKE_AUTOMOC ON)
@@ -20,7 +28,9 @@ endif()
 find_package(nlohmann_json REQUIRED)
 # OpenSSL needed transitively by logos_sdk (plain-C++ TCP+SSL transport)
 find_package(OpenSSL REQUIRED)
-find_package(CLI11 REQUIRED)
+if(LOGOS_BUILD_PLAIN_HOST OR LOGOS_BUILD_QT_HOST)
+  find_package(CLI11 REQUIRED)
+endif()
 find_package(spdlog REQUIRED)
 # Boost: boost::dll (parent-side host-path resolution) pulls in compiled
 # Boost.Filesystem via program_location().
@@ -132,16 +142,21 @@ install(FILES src/qt_plugin_format_loader.h src/host/native_module_host.h
     src/host/transport_set_arg.h src/host/export_link.h
     DESTINATION include/logos_module_loader_qt
 )
-install(TARGETS logos_native_module_host logos_host_process ARCHIVE DESTINATION lib)
+install(TARGETS logos_native_module_host ARCHIVE DESTINATION lib)
+if(LOGOS_BUILD_PLAIN_HOST)
+  install(TARGETS logos_host_process ARCHIVE DESTINATION lib)
+endif()
 # Install the generic format-loader-implementation CMake config so consumers can
 # find_package(LogosFormatLoaderImpl) and get this loader (with its own deps)
 # without naming it. See cmake/LogosFormatLoaderImplConfig.cmake.
 install(FILES cmake/LogosFormatLoaderImplConfig.cmake
     DESTINATION lib/cmake/LogosFormatLoaderImpl
 )
+if(LOGOS_BUILD_PLAIN_HOST)
 install(TARGETS logos_host_plain
     RUNTIME DESTINATION bin
 )
+endif()
 if(LOGOS_BUILD_QT_HOST)
 install(TARGETS logos_host_qt
     RUNTIME DESTINATION bin

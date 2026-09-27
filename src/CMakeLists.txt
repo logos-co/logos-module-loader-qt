@@ -114,6 +114,7 @@ find_package(OpenSSL 3.0 REQUIRED)
 target_link_libraries(logos_native_module_host PUBLIC ${CMAKE_DL_LIBS} OpenSSL::Crypto)
 set_target_properties(logos_native_module_host PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+if(LOGOS_BUILD_PLAIN_HOST)
 # The process side of a Qt-free module host: following the parent, the auth
 # token, the load-status line and the stop. For logos_host_plain and for hosts
 # built elsewhere (logos-peering's logos_host_remote).
@@ -163,6 +164,7 @@ target_include_directories(logos_host_plain PRIVATE
 set_target_properties(logos_host_plain PROPERTIES
     INSTALL_RPATH "$ORIGIN/../lib"
     BUILD_WITH_INSTALL_RPATH TRUE)
+endif()
 
 if(LOGOS_BUILD_QT_HOST)
 # The host reads its auth token from an OS handle (HostTokenSource, default stdin)
