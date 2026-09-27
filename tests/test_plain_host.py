@@ -60,7 +60,7 @@ def invoke(client, method: str, timeout_ms: int = 1000):
 
 class Session:
     def __init__(self, case: str, *, delay_init=False, custom_allocator=False,
-                 concurrency="single", workers=0, extra_args=()):
+                 concurrency="single", workers=0, extra_args=(), configuration=None):
         instance = f"plain_host_test_{os.getpid()}_{case}"
         env = os.environ.copy()
         env["LOGOS_INSTANCE_ID"] = instance
@@ -74,10 +74,14 @@ class Session:
         if workers:
             argv += ["--max-workers", str(workers)]
         argv += list(extra_args)
+        if configuration is not None:
+            argv += ["--configuration-source", "stdin"]
         self.process = subprocess.Popen(argv, stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, env=env)
-        self.process.stdin.write("secret\n")
+        # One write, as liblogos sends both lines.
+        self.process.stdin.write("secret\n" + ("" if configuration is None
+                                                else configuration + "\n"))
         self.process.stdin.flush()
         self.lines = queue.Queue()
         threading.Thread(target=self._read_output, daemon=True).start()
@@ -315,7 +319,41 @@ def test_no_call_runs_after_about_to_unload():
         session.close()
 
 
+def test_configuration_arrives_before_the_context():
+    session = Session("configured", configuration='{"endpoint":"https://example.org"}')
+    try:
+        assert "ok" in session.waitline("@logos-load-status")
+        status, value = invoke(session.client, "configuration")
+        assert status == 0, status
+        assert json.loads(value) == {"document": {"endpoint": "https://example.org"},
+                                     "before_context": True}, value
+    finally:
+        session.close()
+
+
+def test_a_missing_configuration_line_fails_the_load():
+    argv = [str(HOST), "--name", "plain_host_fixture", "--path", str(FIXTURE),
+            "--configuration-source", "stdin"]
+    done = subprocess.run(argv, input="secret\n", capture_output=True, text=True, timeout=15)
+    assert done.returncode == 1, done
+    assert "@logos-load-status failed" in done.stdout, done.stdout
+
+
+def test_the_qt_host_refuses_a_configuration():
+    qt_host = HOST.parent / "logos_host_qt"
+    assert qt_host.exists(), qt_host
+    argv = [str(qt_host), "--name", "plain_host_fixture", "--path", str(FIXTURE),
+            "--configuration-source", "stdin"]
+    done = subprocess.run(argv, input="secret\n{}\n", capture_output=True, text=True,
+                          timeout=15)
+    assert done.returncode == 1, done
+    assert "@logos-load-status failed" in done.stdout and "configuration" in done.stdout, done.stdout
+
+
 test_initialization()
+test_configuration_arrives_before_the_context()
+test_a_missing_configuration_line_fails_the_load()
+test_the_qt_host_refuses_a_configuration()
 test_allocator()
 for case in (("single", 0), ("multi", 1), ("multi", 2)):
     test_concurrency(*case)
@@ -324,5 +362,6 @@ test_exits_when_its_parent_dies()
 test_transport_set()
 test_a_crash_leaves_a_backtrace()
 test_no_call_runs_after_about_to_unload()
-print("plain host: initialization, allocator ownership, worker limits, affinity,"
-      " parent death, transport sets, crash backtraces and unload order passed")
+print("plain host: initialization, configuration, allocator ownership, worker limits,"
+      " affinity, parent death, transport sets, crash backtraces and unload order passed;"
+      " the Qt host refuses a configuration")
