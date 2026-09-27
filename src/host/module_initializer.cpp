@@ -79,14 +79,13 @@ LogosAPI* initializeLogosAPI(const std::string& moduleName, QObject* module,
 {
     // If the daemon passed a transport set for this module, deserialize
     // and use the explicit-transport LogosAPI constructor so the
-    // module's LogosAPIProvider binds every listener (LocalSocket +
-    // any TCP / TCP+SSL endpoints). Otherwise fall back to the
+    // module's LogosAPIProvider binds every listener. Otherwise fall back to the
     // single-arg constructor → global default (LocalSocket only),
     // matching the long-standing behaviour for modules the daemon
     // hasn't explicitly configured.
     LogosAPI* logos_api = nullptr;
     if (!transportSetJson.empty()) {
-        // Refused, not served as local only: that hid the module's TCP listeners.
+        // Refused, not served as local only: that hid the module's listeners.
         LogosTransportSet set;
         std::string problem;
         if (!logos::parseTransportSet(decodeTransportSetArg(transportSetJson), &set, &problem)) {

@@ -397,12 +397,20 @@ TEST(ExportLink, NoCertificateNoExport)
 
 namespace {
 
+// A port a tls_tcp listener took and gave back.
 int freePort()
 {
+    const Key rootKey = newKey();
+    const Cert root = makeCert(rootKey.get(), rootKey.get(), nullptr, nullptr);
+    const Key key = newKey();
+    const Cert leaf = makeCert(key.get(), rootKey.get(), root.get(), "serverAuth");
     lp_provider* probe = lp_provider_create("export_link_port_probe",
-                                            R"([{"protocol":"tcp","host":"127.0.0.1","port":0}])");
+                                            R"([{"protocol":"tls_tcp","host":"127.0.0.1","port":0}])");
     int port = 0;
-    if (probe && lp_provider_register(probe, &Peering::dispatch, &Peering::methods, nullptr, nullptr) == LP_OK) {
+    if (probe
+        && lp_provider_set_tls_credential(probe, (pem(leaf.get()) + pem(root.get())).c_str(),
+                                          pem(key.get()).c_str()) == LP_OK
+        && lp_provider_register(probe, &Peering::dispatch, &Peering::methods, nullptr, nullptr) == LP_OK) {
         char* text = lp_provider_endpoints_json(probe);
         const json endpoints = json::parse(text ? text : "[]", nullptr, false);
         lp_string_free(text);

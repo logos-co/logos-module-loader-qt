@@ -10,7 +10,7 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Network RemoteObjects)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Network RemoteObjects)
 
 find_package(nlohmann_json REQUIRED)
-# OpenSSL needed transitively by logos_sdk (plain-C++ TCP+SSL transport)
+# OpenSSL needed transitively by logos_sdk (tls_tcp sessions)
 find_package(OpenSSL REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(spdlog REQUIRED)
