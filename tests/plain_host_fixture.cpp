@@ -6,7 +6,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <sstream>
+#include <string>
 #include <thread>
 #ifdef _WIN32
 #include <windows.h>
@@ -19,6 +21,13 @@ namespace {
 constexpr std::size_t kAllocationSize = 16384;
 std::atomic<bool> initialized{false};
 std::atomic<bool> unloading{false};
+
+// The last configuration delivered, and how many contexts were set before and after
+// it: an image stays mapped across in-process loads, so this counts rather than flags.
+std::mutex configurationMutex;
+std::string configuration;
+int contextsSet = 0;
+int contextsBeforeConfiguration = -1;
 
 // Memory the host must return through logos_module_string_free, never free().
 char* allocateMapped()
@@ -83,6 +92,13 @@ char* logos_module_dispatch(const char* method, const char*)
         return copyResult("\"plain_host_fixture\"");
     if (std::strcmp(method, "ready") == 0)
         return copyResult(initialized ? "true" : "false");
+    if (std::strcmp(method, "configuration") == 0) {
+        std::lock_guard<std::mutex> lock(configurationMutex);
+        if (configuration.empty()) return copyResult("null");
+        const std::string reply = "{\"document\":" + configuration + ",\"before_context\":"
+            + (contextsSet > contextsBeforeConfiguration ? "true" : "false") + "}";
+        return copyResult(reply.c_str());
+    }
     if (std::strcmp(method, "thread") == 0) {
         std::ostringstream id;
         id << '"' << std::this_thread::get_id() << '"';
@@ -110,8 +126,24 @@ void logos_module_set_context(const char*, const char*, const char*)
         std::fflush(stdout);
         std::this_thread::sleep_for(std::chrono::milliseconds(1200));
     }
+    {
+        std::lock_guard<std::mutex> lock(configurationMutex);
+        ++contextsSet;
+    }
     initialized = true;
 }
+
+#ifndef PLAIN_HOST_FIXTURE_NO_CONFIGURATION
+// Refuses the document "refuse", like an image that cannot parse what it was given.
+LOGOS_MODULE_IMPL_EXPORT int logos_module_set_configuration(const char* json)
+{
+    if (!json || std::strcmp(json, "\"refuse\"") == 0) return -1;
+    std::lock_guard<std::mutex> lock(configurationMutex);
+    configuration = json;
+    contextsBeforeConfiguration = contextsSet;
+    return 0;
+}
+#endif
 
 void logos_module_set_emit_callback(logos_module_emit_cb, void*) {}
 int logos_module_accept_token(const char*, const char*) { return 0; }

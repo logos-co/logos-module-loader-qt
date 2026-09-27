@@ -26,6 +26,10 @@ struct ModuleArgs {
     // container uses. A different container could pass "fd:<n>" or
     // "file:<path>". The host stays agnostic to which container it runs under.
     std::string tokenSource;
+    // "stdin": the module's configuration follows the credential on stdin, as a
+    // second line. The flag is the capability check: an older host refuses it.
+    // Only with the token read from stdin.
+    std::string configurationSource;
     // Privileged host services this module has been granted, as a BARE
     // COMMA-SEPARATED LIST drawn from the closed set logos-protocol documents
     // ("token_delivery"). Empty — the case for every ordinary module — means no

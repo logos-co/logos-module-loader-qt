@@ -30,6 +30,9 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
         "JSON is still accepted; empty = global default");
     app.add_option("--token-source", result.tokenSource,
         "Where to read the auth token from: stdin (default), fd:<n>, or file:<path>");
+    app.add_option("--configuration-source", result.configurationSource,
+        "stdin: the module's configuration follows the auth token on stdin, "
+        "as one more line");
     app.add_option("--host-services", result.hostServices,
         "Privileged host services granted to this module, as a bare "
         "comma-separated list (e.g. token_delivery); "
@@ -61,6 +64,11 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
     if ((result.concurrency != "single" && result.concurrency != "multi")
         || result.maxWorkers < 0
         || (result.concurrency != "multi" && result.maxWorkers != 0)) {
+        return result;
+    }
+    if (!result.configurationSource.empty()
+        && (result.configurationSource != "stdin"
+            || (!result.tokenSource.empty() && result.tokenSource != "stdin"))) {
         return result;
     }
 

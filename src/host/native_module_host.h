@@ -8,6 +8,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 struct lp_provider;
@@ -27,6 +28,9 @@ struct Options {
     // In-process hosts: installed through logos_module_set_runtime_delegate before
     // the module does anything else. An image without that export is refused.
     const lp_runtime_delegate_v1* delegate = nullptr;
+    // The module's configuration, one JSON document delivered through
+    // logos_module_set_configuration before its context; an image without it is refused.
+    std::optional<std::string> configuration;
     // Asked just before the module is published; false abandons the load.
     std::function<bool()> stillWanted;
 };

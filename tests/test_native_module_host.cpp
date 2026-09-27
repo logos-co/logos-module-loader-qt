@@ -5,6 +5,7 @@
 #include <logos_protocol.h>
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include <chrono>
 #include <cstdlib>
@@ -45,12 +46,12 @@ fs::path executableDir()
 }
 
 // Beside this test on Windows, in ../lib elsewhere: the build tree and the package agree.
-std::string fixturePath()
+std::string fixturePath(const std::string& stem = "plain_host_fixture")
 {
     const fs::path dir = executableDir();
-    for (const fs::path& candidate : {dir / "plain_host_fixture.dll",
-                                      dir / ".." / "lib" / "libplain_host_fixture.so",
-                                      dir / ".." / "lib" / "libplain_host_fixture.dylib"}) {
+    for (const fs::path& candidate : {dir / (stem + ".dll"),
+                                      dir / ".." / "lib" / ("lib" + stem + ".so"),
+                                      dir / ".." / "lib" / ("lib" + stem + ".dylib")}) {
         if (fs::exists(candidate)) return fs::absolute(candidate).lexically_normal().u8string();
     }
     return {};
@@ -132,6 +133,48 @@ TEST(NativeModuleHost, ADelegateNeedsTheModulesExport)
     std::string error;
     EXPECT_FALSE(module.start(options, error));
     EXPECT_EQ(error, "module has no runtime delegate export; it cannot run in-process");
+}
+
+// The configuration reaches the image before its context, so onContextReady sees it.
+TEST(NativeModuleHost, TheConfigurationArrivesBeforeTheContext)
+{
+    useInstance("native_host_configured_");
+    Options options = inprocOptions();
+    options.configuration = R"({"endpoint":"https://example.org"})";
+    Module module;
+    std::string error;
+    ASSERT_TRUE(module.start(options, error)) << error;
+    std::string value;
+    ASSERT_EQ(call("configuration", &value), LP_OK);
+    EXPECT_EQ(nlohmann::json::parse(value, nullptr, false),
+              (nlohmann::json{{"document", {{"endpoint", "https://example.org"}}},
+                              {"before_context", true}}))
+        << value;
+    EXPECT_TRUE(module.stop(std::chrono::steady_clock::now() + std::chrono::seconds(3),
+                            Teardown::InProcess));
+}
+
+// A configured load fails before anything is published when the image lacks the
+// export or refuses the document.
+TEST(NativeModuleHost, AConfiguredLoadNeedsTheExportAndAnAcceptedDocument)
+{
+    useInstance("native_host_unconfigurable_");
+    Options options = inprocOptions();
+    options.path = fixturePath("plain_host_fixture_noconfig");
+    ASSERT_FALSE(options.path.empty());
+    options.configuration = "{}";
+    Module withoutExport;
+    std::string error;
+    EXPECT_FALSE(withoutExport.start(options, error));
+    EXPECT_EQ(error, "module has no configuration export; it cannot be configured");
+    EXPECT_NE(call("ready", nullptr, 500), LP_OK);
+
+    Options refused = inprocOptions();
+    refused.configuration = R"("refuse")";
+    Module refusing;
+    EXPECT_FALSE(refusing.start(refused, error));
+    EXPECT_EQ(error, "module refused its configuration");
+    EXPECT_NE(call("ready", nullptr, 500), LP_OK);
 }
 
 // A call that outlives the deadline keeps everything it may touch, and the host moves on.
