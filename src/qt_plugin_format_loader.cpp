@@ -28,15 +28,15 @@ constexpr const char* kExeSuffix = "";
 // asserts about itself. A module's metadata.json declaration is advisory; this
 // is the authority.
 //
-// Deliberately a hardcoded table rather than configuration: these two services
-// let their holder enumerate the token store and hand authority to an
-// arbitrary target, which is capability_module's job and nothing else's. A
-// deployment that wants a different trust root is a different build.
+// Deliberately a hardcoded table rather than configuration: token_delivery lets
+// its holder hand authority to an arbitrary target, which is
+// capability_module's job and nothing else's. A deployment that wants a
+// different trust root is a different build. ("token_registry", which let it
+// enumerate the token store, is retired: capability keeps its own records.)
 //
 // `dynamic_calls` is NOT granted here. It is elevated but not a trust root, so
 // it belongs with the per-module access policy the daemon already applies,
-// alongside allowedCallers — not in a table that exists to keep a list at two
-// entries.
+// alongside allowedCallers — not in a table that exists to keep a list short.
 //
 // The value is a BARE COMMA-SEPARATED LIST, not JSON, because it crosses a
 // command line. This used to be `["token_registry","token_delivery"]` and it
@@ -57,7 +57,7 @@ constexpr const char* kExeSuffix = "";
 const char* hostServicesFor(const std::string& moduleName)
 {
     if (moduleName == "capability_module")
-        return "token_registry,token_delivery";
+        return "token_delivery";
     return nullptr;
 }
 

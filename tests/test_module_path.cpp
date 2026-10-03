@@ -272,13 +272,13 @@ TEST(CommandLineParserPath, ResolutionDoesNotDisturbTheOtherArguments) {
     const ModuleArgs args = parseArgs({"--name", "capability_module",
                                        "--path", "demo_plugin.so",
                                        "--token-source", "fd:7",
-                                       "--host-services", "token_registry,token_delivery",
+                                       "--host-services", "token_delivery",
                                        "--instance-persistence-path", "/var/lib/logos/inst-1"});
 
     ASSERT_TRUE(args.valid);
     EXPECT_EQ("capability_module", args.name);
     EXPECT_EQ("fd:7", args.tokenSource);
-    EXPECT_EQ("token_registry,token_delivery", args.hostServices);
+    EXPECT_EQ("token_delivery", args.hostServices);
     EXPECT_EQ("/var/lib/logos/inst-1", args.instancePersistencePath);
     EXPECT_TRUE(fs::path(args.path).is_absolute()) << args.path;
 }

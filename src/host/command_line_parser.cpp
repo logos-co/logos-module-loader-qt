@@ -32,7 +32,7 @@ ModuleArgs parseCommandLineArgs(int argc, char *argv[])
         "Where to read the auth token from: stdin (default), fd:<n>, or file:<path>");
     app.add_option("--host-services", result.hostServices,
         "Privileged host services granted to this module, as a bare "
-        "comma-separated list (e.g. token_registry,token_delivery); "
+        "comma-separated list (e.g. token_delivery); "
         "empty (the default) means none");
     app.add_option("--concurrency", result.concurrency,
         "Native module dispatch mode: single (default) or multi");

@@ -146,7 +146,7 @@ TEST_F(QtPluginFormatLoaderTest, BuildArguments_GrantsHostServicesToCapabilityMo
     ASSERT_TRUE(services.has_value()) << "the trust root must receive its grant";
     // A bare comma-separated list, NOT a JSON array. module_initializer
     // re-serialises it to JSON before stamping the `hostServices` property.
-    EXPECT_EQ(*services, "token_registry,token_delivery");
+    EXPECT_EQ(*services, "token_delivery");
     ExpectCommandLineSafe(*services);
 }
 
