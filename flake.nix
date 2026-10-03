@@ -4,11 +4,11 @@
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
     nixpkgs.follows = "logos-nix/nixpkgs";
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/runtime-delegate-export";
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/peering";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
-    # On protocol 0.13 (logos-protocol#97) and the branches stacked on it until they merge.
-    logos-protocol.url = "github:logos-co/logos-protocol/feat/drop-legacy-mode";
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/chore/relock-protocol-0.13";
+    # On protocol 0.14 (tls_tcp, logos-protocol#99) and the branches stacked on it until they merge.
+    logos-protocol.url = "github:logos-co/logos-protocol/feat/peering";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/feat/peering";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
