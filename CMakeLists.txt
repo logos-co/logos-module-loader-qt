@@ -122,7 +122,7 @@ install(FILES src/qt_plugin_format_loader.h
 install(FILES cmake/LogosFormatLoaderImplConfig.cmake
     DESTINATION lib/cmake/LogosFormatLoaderImpl
 )
-install(TARGETS logos_host_qt
+install(TARGETS logos_host_qt logos_host_plain
     RUNTIME DESTINATION bin
 )
 

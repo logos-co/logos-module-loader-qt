@@ -7,6 +7,8 @@
 #   logos_host_qt           the child-side host executable that loads a single
 #                           Qt-plugin module in its own process. Links the full
 #                           SDK stack + Qt + logos-module. Bundled by frontends.
+#   logos_host_plain        the Qt-free child host for native module-impl C ABI
+#                           libraries using qt_remote_plain.
 #
 # Both depend on the logos-module-loader contract (and through it logos-container
 # for ModuleDescriptor). The loader/host pair is the matched unit a different
@@ -67,21 +69,59 @@ set(LOGOS_HOST_SOURCES
     host/logos_host.cpp
     host/command_line_parser.cpp
     host/command_line_parser.h
+    host/crash_handler.cpp
+    host/crash_handler.h
     host/module_initializer.cpp
     host/module_initializer.h
     host/module_dll_search.cpp
     host/module_dll_search.h
     host/module_path.cpp
     host/module_path.h
+    host/parent_lifetime.cpp
+    host/parent_lifetime.h
     host/token_source.cpp
     host/token_source.h
+    host/transport_set_arg.cpp
+    host/transport_set_arg.h
     host/qt/qt_app.cpp
     host/qt/qt_app.h
 )
 
 add_executable(logos_host_qt ${LOGOS_HOST_SOURCES})
 
-# The host reads its auth token from an OS handle (TokenSource, default stdin)
+add_executable(logos_host_plain
+    host/logos_host_plain.cpp
+    host/command_line_parser.cpp
+    host/command_line_parser.h
+    host/crash_handler.cpp
+    host/crash_handler.h
+    host/module_dll_search.cpp
+    host/module_dll_search.h
+    host/module_path.cpp
+    host/module_path.h
+    host/parent_lifetime.cpp
+    host/parent_lifetime.h
+    host/token_source.cpp
+    host/token_source.h
+    host/transport_set_arg.cpp
+    host/transport_set_arg.h
+)
+target_link_libraries(logos_host_plain PRIVATE
+    logos_container
+    logos-protocol::logos_protocol_plain
+    CLI11::CLI11
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    ${CMAKE_DL_LIBS}
+)
+target_include_directories(logos_host_plain PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/host
+)
+set_target_properties(logos_host_plain PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../lib"
+    BUILD_WITH_INSTALL_RPATH TRUE)
+
+# The host reads its auth token from an OS handle (HostTokenSource, default stdin)
 # named by --token-source and writes its load status to stdout, so it depends on
 # no container IMPLEMENTATION. logos_container is header-only and names none: it
 # carries the wording of the status line, which both sides have to agree on.

@@ -4,6 +4,10 @@
 #include <string>
 
 struct ModuleArgs {
+    // Metadata-only compatibility mode. The Qt host reads Q_PLUGIN_METADATA,
+    // writes the inner metadata JSON to stdout, and exits without loading or
+    // starting the module. This keeps Qt metadata parsing out of liblogos.
+    std::string inspectPath;
     std::string name;
     // Path to the module file, always ABSOLUTE: a relative --path is resolved
     // against the process working directory during parsing (ModulePath::resolve).
@@ -18,7 +22,7 @@ struct ModuleArgs {
     // behaviour for modules the daemon hasn't configured.
     std::string transportSetJson;
     // Where to read the auth token from, set by the container that spawned us
-    // (see TokenSource). Empty means "stdin" — the default the subprocess
+    // (see HostTokenSource). Empty means "stdin" — the default the subprocess
     // container uses. A different container could pass "fd:<n>" or
     // "file:<path>". The host stays agnostic to which container it runs under.
     std::string tokenSource;
@@ -39,9 +43,19 @@ struct ModuleArgs {
     // cdylib module forwards it across the module-impl C ABI into its OWN
     // image, which is the only image whose gates it can open.
     std::string hostServices;
+    // Dispatch policy for a native cdylib. "single" is the compatibility
+    // default; "multi" admits up to maxWorkers calls at once. Zero selects a
+    // bounded hardware-derived default.
+    std::string concurrency = "single";
+    int maxWorkers = 0;
     bool valid;
 };
 
+// argv must be UTF-8.
 ModuleArgs parseCommandLineArgs(int argc, char *argv[]);
+
+// This process's own arguments. Windows hands main() the ANSI code page, so
+// there they are re-read from the wide command line as UTF-8.
+ModuleArgs parseProcessArguments(int argc, char *argv[]);
 
 #endif // COMMAND_LINE_PARSER_H
