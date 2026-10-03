@@ -50,7 +50,19 @@ if(WIN32)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/windows-tests")
 endif()
 
-add_dependencies(logos_module_loader_qt_tests plain_host_fixture)
+# The same module without logos_module_set_configuration, which a configured load refuses.
+add_library(plain_host_fixture_noconfig SHARED plain_host_fixture.cpp)
+target_compile_definitions(plain_host_fixture_noconfig PRIVATE PLAIN_HOST_FIXTURE_NO_CONFIGURATION)
+target_include_directories(plain_host_fixture_noconfig PRIVATE
+    ${LOGOS_PROTOCOL_ROOT}/include)
+if(WIN32)
+    set_target_properties(plain_host_fixture_noconfig PROPERTIES
+        PREFIX ""
+        AUTOMOC OFF
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/windows-tests")
+endif()
+
+add_dependencies(logos_module_loader_qt_tests plain_host_fixture plain_host_fixture_noconfig)
 
 if(WIN32)
     add_subdirectory(windows)

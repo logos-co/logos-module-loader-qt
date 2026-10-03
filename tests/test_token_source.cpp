@@ -113,6 +113,44 @@ TEST(TokenSource, ReadsOnlyFirstLine) {
     EXPECT_EQ(tok, "first-line");
 }
 
+// The configuration line usually shares the credential's write, and one read()
+// returns both: reading the lines separately would lose the second.
+TEST(TokenSource, TheConfigurationFollowsTheCredentialInTheSameWrite) {
+    const int rfd = pipeWith("secret\n{\"endpoint\":\"x\"}\n");
+    ASSERT_GE(rfd, 0);
+    const auto input = HostTokenSource::readStartupInput("fd:" + std::to_string(rfd), true);
+    ::close(rfd);
+    EXPECT_EQ(input.token, "secret");
+    EXPECT_EQ(input.configuration, "{\"endpoint\":\"x\"}");
+}
+
+TEST(TokenSource, TheConfigurationMayArriveInALaterWrite) {
+    int fds[2];
+    ASSERT_EQ(makePipe(fds), 0);
+    ASSERT_GT(writeFd(fds[1], "secret\r\n", 8), 0);
+    std::thread later([fd = fds[1]] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        (void)writeFd(fd, "{}\r\n", 4);
+        ::close(fd);
+    });
+    const auto input = HostTokenSource::readStartupInput("fd:" + std::to_string(fds[0]), true, 5000);
+    later.join();
+    ::close(fds[0]);
+    EXPECT_EQ(input.token, "secret");
+    EXPECT_EQ(input.configuration, "{}");
+}
+
+TEST(TokenSource, AMissingConfigurationFailsTheWholeRead) {
+    for (const char* data : {"secret\n", "secret\n\n", "secret"}) {
+        const int rfd = pipeWith(data);
+        ASSERT_GE(rfd, 0);
+        const auto input = HostTokenSource::readStartupInput("fd:" + std::to_string(rfd), true);
+        ::close(rfd);
+        EXPECT_TRUE(input.token.empty()) << data;
+        EXPECT_TRUE(input.configuration.empty()) << data;
+    }
+}
+
 TEST(TokenSource, ReadsFromFile) {
     std::string path;
     const int fd = makeTempFile(path);

@@ -195,6 +195,14 @@ int main(int argc, char *argv[])
 
     installCrashHandler(args.name.c_str());
 
+    // A Qt plugin has no configuration export. Read what the container sent, so
+    // its writes complete, and refuse: the load fails rather than run unconfigured.
+    if (!args.configurationSource.empty()) {
+        (void)HostTokenSource::readStartupInput(args.tokenSource, true);
+        reportLoadStatus(false, "a Qt plugin module cannot be given a configuration");
+        return 1;
+    }
+
     // Before QtApp::init, so that anything Qt says while starting up lands on
     // stderr too rather than in whichever backend it would have chosen.
     qInstallMessageHandler(hostMessageHandler);

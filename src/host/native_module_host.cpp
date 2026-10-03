@@ -5,6 +5,9 @@
 #if defined(LOGOS_PROTOCOL_HAS_RUNTIME_DELEGATE)
 #include <logos_runtime_delegate.h>
 #endif
+#if defined(LOGOS_PROTOCOL_HAS_MODULE_CONFIGURATION)
+#include <logos_module_configuration.h>
+#endif
 
 #include <nlohmann/json.hpp>
 
@@ -306,6 +309,19 @@ bool Module::start(const Options& options, std::string& error)
     if (!options.hostServices.empty()
         && state.abi.grantHostServices(options.hostServices.c_str()) != LP_OK)
         return state.fail(error, "module refused host-services grant");
+    // Before the emit callback and the context: onContextReady fires inside set_context.
+    if (options.configuration) {
+#if defined(LOGOS_PROTOCOL_HAS_MODULE_CONFIGURATION)
+        const auto configure = state.library.optionalSymbol<logos_module_set_configuration_fn>(
+            LOGOS_MODULE_SET_CONFIGURATION_SYMBOL);
+        if (!configure)
+            return state.fail(error, "module has no configuration export; it cannot be configured");
+        if (configure(options.configuration->c_str()) != 0)
+            return state.fail(error, "module refused its configuration");
+#else
+        return state.fail(error, "this logos-protocol cannot deliver a module configuration");
+#endif
+    }
 
     state.abi.setEmitCallback(&State::emitEvent, &state);
     const auto persistence = std::filesystem::u8path(options.instancePersistencePath);

@@ -107,12 +107,16 @@ int main(int argc, char** argv)
     if (!args.valid) return 1;
     installCrashHandler(args.name.c_str());
 
-    const std::string token = HostTokenSource::read(args.tokenSource);
-    if (token.empty()) {
-        reportLoadStatus(false, "no auth token arrived on "
-            + (args.tokenSource.empty() ? std::string("stdin") : args.tokenSource));
+    const bool configured = !args.configurationSource.empty();
+    HostTokenSource::StartupInput input =
+        HostTokenSource::readStartupInput(args.tokenSource, configured);
+    if (input.token.empty()) {
+        reportLoadStatus(false, std::string(configured ? "no auth token and configuration"
+                                                       : "no auth token")
+            + " arrived on " + (args.tokenSource.empty() ? std::string("stdin") : args.tokenSource));
         return 1;
     }
+    const std::string token = input.token;
     if (const std::string problem = ModulePath::fileProblem(args.path); !problem.empty()) {
         reportLoadStatus(false, problem);
         return 1;
@@ -137,6 +141,7 @@ int main(int argc, char** argv)
                                                      : hostServicesJson(args.hostServices);
     options.maxCalls = logos::native_host::maxCallsFor(args.concurrency, args.maxWorkers);
     options.instancePersistencePath = args.instancePersistencePath;
+    if (configured) options.configuration = std::move(input.configuration);
     logos::native_host::Module module;
     if (std::string error; !module.start(options, error)) {
         reportLoadStatus(false, error);

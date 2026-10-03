@@ -265,3 +265,22 @@ TEST(CommandLineParserTest, RejectsWorkerCapOutsideMultiMode) {
     for (auto& value : values) argv.push_back(value.data());
     EXPECT_FALSE(parseCommandLineArgs(static_cast<int>(argv.size()), argv.data()).valid);
 }
+
+// The configuration comes from stdin, after a credential read from stdin too.
+TEST(CommandLineParserTest, TheConfigurationSourceIsStdinAfterAStdinCredential) {
+    const auto parse = [](std::vector<std::string> values) {
+        std::vector<char*> argv;
+        for (auto& value : values) argv.push_back(value.data());
+        return parseCommandLineArgs(static_cast<int>(argv.size()), argv.data());
+    };
+    const ModuleArgs accepted = parse({"logos_host_plain", "--name", "worker", "--path",
+                                       "/tmp/worker.so", "--configuration-source", "stdin"});
+    ASSERT_TRUE(accepted.valid);
+    EXPECT_EQ(accepted.configurationSource, "stdin");
+    EXPECT_TRUE(parse({"logos_host_plain", "--name", "worker", "--path", "/tmp/worker.so",
+                       "--token-source", "stdin", "--configuration-source", "stdin"}).valid);
+    EXPECT_FALSE(parse({"logos_host_plain", "--name", "worker", "--path", "/tmp/worker.so",
+                        "--configuration-source", "file:/tmp/c.json"}).valid);
+    EXPECT_FALSE(parse({"logos_host_plain", "--name", "worker", "--path", "/tmp/worker.so",
+                        "--token-source", "fd:7", "--configuration-source", "stdin"}).valid);
+}

@@ -30,6 +30,17 @@ namespace HostTokenSource {
 // on error/timeout. `timeout_ms` bounds how long to wait for data to arrive.
 std::string read(const std::string& source, int timeout_ms = 10000);
 
+// The credential and, with `withConfiguration`, the module's configuration: one
+// JSON document on the NEXT line of the same channel (--configuration-source stdin).
+// Both lines come from one reader, so bytes after the first newline are kept.
+// An empty token means an error; a missing or empty second line is one too.
+struct StartupInput {
+    std::string token;
+    std::string configuration;
+};
+StartupInput readStartupInput(const std::string& source, bool withConfiguration,
+                              int timeout_ms = 10000);
+
 }  // namespace HostTokenSource
 
 #endif  // TOKEN_SOURCE_H
