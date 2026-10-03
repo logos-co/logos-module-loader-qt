@@ -13,7 +13,6 @@ import os
 import queue
 import resource
 import signal
-import socket
 import subprocess
 import sys
 import threading
@@ -240,27 +239,25 @@ def test_exits_when_its_parent_dies():
 
 def test_transport_set():
     # The loader base64-encodes --transport-set; the host passed it on raw,
-    # served local only, and still reported the load ok.
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    transports = json.dumps([{"protocol": "local"},
-                             {"protocol": "tcp", "host": "127.0.0.1", "port": port}])
+    # served local only, and still reported the load ok. Raw base64 is not
+    # JSON, so a set that loads was decoded.
+    transports = json.dumps([{"protocol": "local"}, {"protocol": "qt_remote_plain"}])
     encoded = base64.b64encode(transports.encode()).decode()
     session = Session("transport_set", extra_args=["--transport-set", encoded])
     try:
         assert "ok" in session.waitline("@logos-load-status")
-        with socket.create_connection(("127.0.0.1", port), timeout=2):
-            pass
     finally:
         session.close()
 
-    result = subprocess.run(
-        [str(HOST), "--name", "plain_host_fixture", "--path", str(FIXTURE),
-         "--transport-set", base64.b64encode(b"not json").decode()],
-        input="secret\n", capture_output=True, text=True, timeout=10)
-    assert result.returncode != 0, result.stdout
-    assert "@logos-load-status failed unusable --transport-set" in result.stdout, result.stdout
+    # Refused, never served local only: not JSON, and tcp (removed in 0.15).
+    removed = json.dumps([{"protocol": "tcp", "host": "127.0.0.1", "port": 0}])
+    for given in (b"not json", removed.encode()):
+        result = subprocess.run(
+            [str(HOST), "--name", "plain_host_fixture", "--path", str(FIXTURE),
+             "--transport-set", base64.b64encode(given).decode()],
+            input="secret\n", capture_output=True, text=True, timeout=10)
+        assert result.returncode != 0, result.stdout
+        assert "@logos-load-status failed unusable --transport-set" in result.stdout, result.stdout
 
 
 def drain(session, timeout=5):

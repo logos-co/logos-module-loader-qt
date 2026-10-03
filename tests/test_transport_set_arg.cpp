@@ -7,8 +7,8 @@ TEST(TransportSetArg, DecodesTheLoadersBase64)
 {
     EXPECT_EQ(decodeTransportSetArg("W3sicHJvdG9jb2wiOiJsb2NhbCJ9XQ=="),
               R"([{"protocol":"local"}])");
-    EXPECT_EQ(decodeTransportSetArg("W3sicHJvdG9jb2wiOiJ0Y3AiLCJwb3J0Ijo2MDAxfV0="),
-              R"([{"protocol":"tcp","port":6001}])");
+    EXPECT_EQ(decodeTransportSetArg("W3sicHJvdG9jb2wiOiJ0bHNfdGNwIiwicG9ydCI6NzQ0M31d"),
+              R"([{"protocol":"tls_tcp","port":7443}])");
 }
 
 TEST(TransportSetArg, PassesRawJsonThrough)
