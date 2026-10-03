@@ -113,9 +113,10 @@ install(TARGETS logos_module_loader_qt
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )
-install(FILES src/qt_plugin_format_loader.h
+install(FILES src/qt_plugin_format_loader.h src/host/native_module_host.h
     DESTINATION include/logos_module_loader_qt
 )
+install(TARGETS logos_native_module_host ARCHIVE DESTINATION lib)
 # Install the generic format-loader-implementation CMake config so consumers can
 # find_package(LogosFormatLoaderImpl) and get this loader (with its own deps)
 # without naming it. See cmake/LogosFormatLoaderImplConfig.cmake.

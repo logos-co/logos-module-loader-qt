@@ -25,4 +25,16 @@ if(NOT TARGET LogosFormatLoaderImpl::impl)
   )
 endif()
 
+# The native host's module bring-up, for a runtime that loads modules in-process.
+# It links no lp_* runtime; the consumer brings its own.
+if(NOT TARGET LogosFormatLoaderImpl::native_module_host
+   AND EXISTS "${_logos_format_loader_impl_prefix}/lib/liblogos_native_module_host.a")
+  add_library(LogosFormatLoaderImpl::native_module_host STATIC IMPORTED)
+  set_target_properties(LogosFormatLoaderImpl::native_module_host PROPERTIES
+    IMPORTED_LOCATION "${_logos_format_loader_impl_prefix}/lib/liblogos_native_module_host.a"
+    INTERFACE_INCLUDE_DIRECTORIES "${_logos_format_loader_impl_prefix}/include/logos_module_loader_qt"
+    INTERFACE_LINK_LIBRARIES "${CMAKE_DL_LIBS}"
+  )
+endif()
+
 unset(_logos_format_loader_impl_prefix)
