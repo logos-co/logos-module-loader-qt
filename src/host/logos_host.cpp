@@ -249,12 +249,14 @@ void hostMessageHandler(QtMsgType type, const QMessageLogContext &context,
 
 // The module's chance to finish, between "stop" and teardown.
 //
-// Budget. The subprocess container gives a module 5s from the stop signal
-// before it resorts to SIGKILL, and everything after this -- `delete logos_api`
+// Budget. The subprocess container gives a module 12s from the stop signal
+// before it resorts to SIGKILL (kGracefulExitWindow in
+// logos-container-subprocess), and everything after this -- `delete logos_api`
 // and the destructor chain that unlinks the QtRO socket -- has to fit in what
-// is left. 3s spends most of the window on the module while keeping a margin
-// that is actually enough for the teardown it precedes.
-constexpr int kUnloadGraceMs = 3000;
+// is left. 10s spends most of the window on the module while keeping a margin
+// that is actually enough for the teardown it precedes. Widen the container's
+// window before widening this.
+constexpr int kUnloadGraceMs = 10000;
 
 // Invoked BY NAME, not through the vtable, and that is the whole reason this is
 // shaped the way it is. `PluginInterface` is compiled into every module .so
@@ -443,8 +445,8 @@ int main(int argc, char *argv[])
     // pulling that away.
     //
     // The wait is BOUNDED, and deliberately shorter than the container's grace
-    // period: a module that never finishes must cost us a few seconds, not the
-    // whole budget, because whatever is left of that budget is what stands
+    // period: a module that never finishes must cost us the grace period, not
+    // the whole budget, because whatever is left of that budget is what stands
     // between a clean exit and SIGKILL.
     runAboutToUnload(pluginObject, kUnloadGraceMs);
 
