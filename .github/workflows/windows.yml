@@ -16,7 +16,13 @@ jobs:
     secrets: inherit
     with:
       targets: logos-module-loader-qt-tests
+      # The suites nix/tests.nix declares, one gtest case per process.
+      tests: true
+      # The native test leg runs these, so only wine keeps the smoke.
+      native-smoke: false
       smoke: |
         run logos-module-loader-qt-tests/bin/logos_module_loader_qt_tests.exe
         run logos-module-loader-qt-tests/bin/logos_host_dll_search_tests.exe control
         run logos-module-loader-qt-tests/bin/logos_host_dll_search_tests.exe configured
+        run logos-module-loader-qt-tests/bin/logos_host_plain_stop_tests.exe
+        run logos-module-loader-qt-tests/bin/logos_host_plain_dll_tests.exe

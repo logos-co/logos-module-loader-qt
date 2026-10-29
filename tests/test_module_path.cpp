@@ -282,3 +282,22 @@ TEST(CommandLineParserPath, ResolutionDoesNotDisturbTheOtherArguments) {
     EXPECT_EQ("/var/lib/logos/inst-1", args.instancePersistencePath);
     EXPECT_TRUE(fs::path(args.path).is_absolute()) << args.path;
 }
+
+TEST(CommandLineParserPath, InspectModeResolvesItsPluginWithoutLoadArguments) {
+    TempDir dir("parse_inspect");
+    ScopedCwd cwd(dir.path());
+    writeFile("demo_plugin.so", "not really a plugin");
+
+    const ModuleArgs args = parseArgs({"--inspect", "demo_plugin.so"});
+
+    ASSERT_TRUE(args.valid);
+    EXPECT_TRUE(args.name.empty());
+    EXPECT_TRUE(args.path.empty());
+    EXPECT_TRUE(fs::equivalent(args.inspectPath, dir.path() / "demo_plugin.so"));
+}
+
+TEST(CommandLineParserPath, InspectModeRejectsLoadArguments) {
+    const ModuleArgs args = parseArgs({"--inspect", "demo_plugin.so",
+                                       "--name", "demo", "--path", "demo_plugin.so"});
+    EXPECT_FALSE(args.valid);
+}

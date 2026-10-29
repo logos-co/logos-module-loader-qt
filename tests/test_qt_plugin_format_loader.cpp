@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 #include "qt_plugin_format_loader.h"
+#include "command_line_parser.h"
 
 class QtPluginFormatLoaderTest : public ::testing::Test {
 protected:
@@ -31,6 +32,12 @@ TEST_F(QtPluginFormatLoaderTest, Id_ReturnsQtPlugin) {
 TEST_F(QtPluginFormatLoaderTest, CanHandle_AcceptsQtPluginFormat) {
     LogosCore::ModuleDescriptor desc;
     desc.format = "qt-plugin";
+    EXPECT_TRUE(loader.canHandle(desc));
+}
+
+TEST_F(QtPluginFormatLoaderTest, CanHandle_AcceptsNativeCdylibFormat) {
+    LogosCore::ModuleDescriptor desc;
+    desc.format = "native-cdylib";
     EXPECT_TRUE(loader.canHandle(desc));
 }
 
@@ -203,4 +210,58 @@ TEST_F(QtPluginFormatLoaderTest, BuildArguments_OmitsTransportSetWhenEmpty) {
     auto args = loader.buildArguments(desc);
 
     EXPECT_FALSE(valueOf(args, "--transport-set").has_value());
+}
+
+TEST_F(QtPluginFormatLoaderTest, BuildArguments_ForwardsNativeMultiDispatchPolicy) {
+    LogosCore::ModuleDescriptor desc;
+    desc.name = "worker";
+    desc.path = "/lib/worker.so";
+    desc.format = "native-cdylib";
+    desc.rawMetadata = {{"concurrency", "multi"}, {"max_workers", 3}};
+
+    const auto args = loader.buildArguments(desc);
+
+    ASSERT_EQ(valueOf(args, "--concurrency"), std::optional<std::string>("multi"));
+    ASSERT_EQ(valueOf(args, "--max-workers"), std::optional<std::string>("3"));
+}
+
+TEST_F(QtPluginFormatLoaderTest, BuildArguments_KeepsSingleDispatchAsHostDefault) {
+    LogosCore::ModuleDescriptor desc;
+    desc.name = "worker";
+    desc.path = "/lib/worker.so";
+    desc.format = "native-cdylib";
+    desc.rawMetadata = {{"concurrency", "single"}, {"max_workers", 3}};
+
+    const auto args = loader.buildArguments(desc);
+
+    EXPECT_FALSE(valueOf(args, "--concurrency").has_value());
+    EXPECT_FALSE(valueOf(args, "--max-workers").has_value());
+}
+
+TEST(CommandLineParserTest, AcceptsBoundedMultiDispatchPolicy) {
+    std::vector<std::string> values = {"logos_host_plain", "--name", "worker", "--path",
+                                       "/tmp/worker.so", "--concurrency", "multi",
+                                       "--max-workers", "3"};
+    std::vector<char*> argv;
+    for (auto& value : values) argv.push_back(value.data());
+    const ModuleArgs args = parseCommandLineArgs(static_cast<int>(argv.size()), argv.data());
+    ASSERT_TRUE(args.valid);
+    EXPECT_EQ(args.concurrency, "multi");
+    EXPECT_EQ(args.maxWorkers, 3);
+}
+
+TEST(CommandLineParserTest, RejectsUnknownDispatchPolicy) {
+    std::vector<std::string> values = {"logos_host_plain", "--name", "worker", "--path",
+                                       "/tmp/worker.so", "--concurrency", "unbounded"};
+    std::vector<char*> argv;
+    for (auto& value : values) argv.push_back(value.data());
+    EXPECT_FALSE(parseCommandLineArgs(static_cast<int>(argv.size()), argv.data()).valid);
+}
+
+TEST(CommandLineParserTest, RejectsWorkerCapOutsideMultiMode) {
+    std::vector<std::string> values = {"logos_host_plain", "--name", "worker", "--path",
+                                       "/tmp/worker.so", "--max-workers", "3"};
+    std::vector<char*> argv;
+    for (auto& value : values) argv.push_back(value.data());
+    EXPECT_FALSE(parseCommandLineArgs(static_cast<int>(argv.size()), argv.data()).valid);
 }

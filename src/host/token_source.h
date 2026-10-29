@@ -23,13 +23,13 @@
 // The token is the bytes up to the first newline (or end-of-stream); a single
 // trailing '\n' / '\r' is stripped. Reads are bounded by a timeout so a child
 // never blocks forever if the token is never delivered.
-namespace TokenSource {
+namespace HostTokenSource {
 
 // Read the token from the channel described by `source` (the value of
 // --token-source; empty means "stdin"). Returns the token, or an empty string
 // on error/timeout. `timeout_ms` bounds how long to wait for data to arrive.
 std::string read(const std::string& source, int timeout_ms = 10000);
 
-}  // namespace TokenSource
+}  // namespace HostTokenSource
 
 #endif  // TOKEN_SOURCE_H
